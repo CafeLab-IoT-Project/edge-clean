@@ -14,7 +14,7 @@ class DeviceRegistrationService:
         return secrets.token_urlsafe(32)
     
     @staticmethod
-    def register_device(device_id: str) -> Device:
+    def register_device(device_id: str, lot_id: str | None = None) -> Device:
         """Create and persist a new device with generated credentials.
         
         Args:
@@ -37,5 +37,5 @@ class DeviceRegistrationService:
         api_key = DeviceRegistrationService.generate_api_key()
         created_at = datetime.utcnow()
         
-        return Device(device_id, api_key, created_at)
+        return Device(device_id, api_key, lot_id, created_at)
     
