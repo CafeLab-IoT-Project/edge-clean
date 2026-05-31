@@ -17,7 +17,20 @@ class BaseModel(Model):
 def init_db():
     db.connect(reuse_if_open=True)
     from iam.infrastructure.models import DeviceModel
-    db.create_tables([DeviceModel], safe=True)
+    from iotmonitoring.infrastructure.models import (
+        ActuatorEventModel,
+        SensorReadingModel,
+        StorageThresholdsModel,
+    )
+    db.create_tables(
+        [
+            DeviceModel,
+            SensorReadingModel,
+            StorageThresholdsModel,
+            ActuatorEventModel,
+        ],
+        safe=True,
+    )
     db.close()
 
 if __name__ == "__main__":

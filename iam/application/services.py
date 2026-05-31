@@ -20,3 +20,6 @@ class IamApplicationService:
 
         device = self.registration_service.register_device(device_id, lot_id)
         return self.device_repository.save(device)
+
+    def get_or_create_development_device(self) -> Device:
+        return self.device_repository.get_or_create_development_device()

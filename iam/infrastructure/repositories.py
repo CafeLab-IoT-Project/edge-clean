@@ -1,4 +1,5 @@
 from typing import Optional
+from datetime import datetime
 
 import peewee
 
@@ -44,3 +45,20 @@ class DeviceRepository:
             created_at=device.created_at,
         )
         return device
+
+    @staticmethod
+    def get_or_create_development_device() -> Device:
+        device, _ = DeviceModel.get_or_create(
+            device_id="tracksilo-001",
+            defaults={
+                "api_key": "test-api-key-123",
+                "lot_id": None,
+                "created_at": datetime.utcnow(),
+            },
+        )
+        return Device(
+            device.device_id,
+            device.api_key,
+            device.lot_id,
+            device.created_at,
+        )

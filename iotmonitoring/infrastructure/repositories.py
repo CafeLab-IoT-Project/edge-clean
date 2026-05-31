@@ -1,0 +1,157 @@
+import peewee
+
+from iotmonitoring.domain.entities import ActuatorEvent, SensorReading, StorageThresholds
+from iotmonitoring.infrastructure.models import (
+    ActuatorEventModel,
+    SensorReadingModel,
+    StorageThresholdsModel,
+)
+
+
+class SensorReadingRepository:
+    @staticmethod
+    def save(reading: SensorReading) -> SensorReading:
+        record = SensorReadingModel.create(
+            device_id=reading.device_id,
+            temperature=reading.temperature,
+            humidity=reading.humidity,
+            recorded_at=reading.recorded_at,
+        )
+        return SensorReading(
+            record.device_id,
+            record.temperature,
+            record.humidity,
+            record.recorded_at,
+            record.id,
+        )
+
+    @staticmethod
+    def find_latest_by_device_id(device_id: str) -> SensorReading | None:
+        try:
+            record = (
+                SensorReadingModel
+                .select()
+                .where(SensorReadingModel.device_id == device_id)
+                .order_by(SensorReadingModel.recorded_at.desc(), SensorReadingModel.id.desc())
+                .get()
+            )
+            return SensorReading(
+                record.device_id,
+                record.temperature,
+                record.humidity,
+                record.recorded_at,
+                record.id,
+            )
+        except peewee.DoesNotExist:
+            return None
+
+    @staticmethod
+    def find_recent_by_device_id(device_id: str, limit: int = 10) -> list[SensorReading]:
+        records = (
+            SensorReadingModel
+            .select()
+            .where(SensorReadingModel.device_id == device_id)
+            .order_by(SensorReadingModel.recorded_at.desc(), SensorReadingModel.id.desc())
+            .limit(limit)
+        )
+        return [
+            SensorReading(
+                record.device_id,
+                record.temperature,
+                record.humidity,
+                record.recorded_at,
+                record.id,
+            )
+            for record in records
+        ]
+
+
+class StorageThresholdsRepository:
+    @staticmethod
+    def save_current(thresholds: StorageThresholds) -> StorageThresholds:
+        (
+            StorageThresholdsModel
+            .update(is_current=False)
+            .where(StorageThresholdsModel.device_id == thresholds.device_id)
+            .execute()
+        )
+        record = StorageThresholdsModel.create(
+            device_id=thresholds.device_id,
+            min_temperature=thresholds.min_temperature,
+            max_temperature=thresholds.max_temperature,
+            min_humidity=thresholds.min_humidity,
+            max_humidity=thresholds.max_humidity,
+            is_current=True,
+        )
+        return StorageThresholds(
+            record.device_id,
+            record.min_temperature,
+            record.max_temperature,
+            record.min_humidity,
+            record.max_humidity,
+            record.id,
+            record.is_current,
+        )
+
+    @staticmethod
+    def find_current_by_device_id(device_id: str) -> StorageThresholds | None:
+        try:
+            record = (
+                StorageThresholdsModel
+                .select()
+                .where(
+                    (StorageThresholdsModel.device_id == device_id)
+                    & (StorageThresholdsModel.is_current == True)
+                )
+                .order_by(StorageThresholdsModel.id.desc())
+                .get()
+            )
+            return StorageThresholds(
+                record.device_id,
+                record.min_temperature,
+                record.max_temperature,
+                record.min_humidity,
+                record.max_humidity,
+                record.id,
+                record.is_current,
+            )
+        except peewee.DoesNotExist:
+            return None
+
+
+class ActuatorEventRepository:
+    @staticmethod
+    def save(event: ActuatorEvent) -> ActuatorEvent:
+        record = ActuatorEventModel.create(
+            device_id=event.device_id,
+            event_type=event.event_type,
+            triggered_at=event.triggered_at,
+            resolved_at=event.resolved_at,
+        )
+        return ActuatorEvent(
+            record.device_id,
+            record.event_type,
+            record.triggered_at,
+            record.id,
+            record.resolved_at,
+        )
+
+    @staticmethod
+    def find_recent_by_device_id(device_id: str, limit: int = 10) -> list[ActuatorEvent]:
+        records = (
+            ActuatorEventModel
+            .select()
+            .where(ActuatorEventModel.device_id == device_id)
+            .order_by(ActuatorEventModel.triggered_at.desc(), ActuatorEventModel.id.desc())
+            .limit(limit)
+        )
+        return [
+            ActuatorEvent(
+                record.device_id,
+                record.event_type,
+                record.triggered_at,
+                record.id,
+                record.resolved_at,
+            )
+            for record in records
+        ]
