@@ -174,11 +174,17 @@ Detalle en [`raspberrypi/README.md`](raspberrypi/README.md).
 > perder el acceso durante la prueba.
 
 ```bash
-# 1) Instalar el binario wifi-connect según tu arch (uname -m):
-#    Descarga el release correcto desde:
-#    https://github.com/balena-os/wifi-connect/releases
+# 1a) Instalar el binario wifi-connect según tu arch (uname -m):
+#     https://github.com/balena-os/wifi-connect/releases
 sudo cp wifi-connect /usr/local/sbin/wifi-connect
 sudo chmod +x /usr/local/sbin/wifi-connect
+
+# 1b) Instalar la UI (asset APARTE wifi-connect-ui.tar.gz; sin esto el portal da 404)
+curl -sL -o wifi-connect-ui.tar.gz \
+  https://github.com/balena-os/wifi-connect/releases/download/v4.11.84/wifi-connect-ui.tar.gz
+sudo mkdir -p /usr/local/share/wifi-connect/ui
+sudo tar xzf wifi-connect-ui.tar.gz -C /usr/local/share/wifi-connect/ui
+ls /usr/local/share/wifi-connect/ui/index.html   # debe existir
 
 # 2) Instalar launcher + servicio
 sudo cp ~/edge-clean/deploy/raspberrypi/cafelab-wifi-portal.sh /usr/local/bin/

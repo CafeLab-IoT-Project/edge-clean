@@ -27,6 +27,7 @@ def init_db():
     from iam.infrastructure.models import DeviceModel
     from iotmonitoring.infrastructure.models import (
         ActuatorEventModel,
+        BackendAccountModel,
         SensorReadingModel,
         StorageThresholdsModel,
     )
@@ -41,6 +42,7 @@ def init_db():
             SensorReadingModel,
             StorageThresholdsModel,
             ActuatorEventModel,
+            BackendAccountModel,
         ],
         safe=True,
     )

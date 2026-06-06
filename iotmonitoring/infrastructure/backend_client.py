@@ -44,7 +44,7 @@ class BackendClient:
     """Outbound client to the CafeLab Java backend (service-account / JWT)."""
 
     def __init__(self, config: BackendConfig | None = None):
-        self.config = config or BackendConfig.from_env()
+        self.config = config or BackendConfig.resolve()
         self._token: str | None = None
         self._lock = threading.Lock()
 

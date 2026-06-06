@@ -39,3 +39,16 @@ class ActuatorEventModel(BaseModel):
 
     class Meta:
         table_name = "actuator_events"
+
+
+class BackendAccountModel(BaseModel):
+    # Cuenta CafeLab con la que el usuario vincula este edge al backend.
+    # Reemplaza las env vars BACKEND_SERVICE_*. Fila única.
+    id = AutoField()
+    base_url = CharField()
+    email = CharField()
+    password = CharField()
+    updated_at = DateTimeField()
+
+    class Meta:
+        table_name = "backend_account"
