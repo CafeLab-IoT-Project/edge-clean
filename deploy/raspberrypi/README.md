@@ -39,9 +39,17 @@ reinicia.
    sudo chmod +x /usr/local/sbin/wifi-connect
    ```
 
-   > El binario incluye los archivos del portal (UI). Si tu release los trae
-   > aparte (`ui/`), cópialos a `/usr/local/share/wifi-connect/ui` y pasa
-   > `--ui-directory` en el script.
+   > ⚠️ **Importante:** el release trae el binario **y** una carpeta `ui/` con la
+   > web del portal. Si solo copias el binario, el portal responde **404**.
+   > Copia también el UI:
+   >
+   > ```bash
+   > sudo mkdir -p /usr/local/share/wifi-connect
+   > sudo cp -r ui /usr/local/share/wifi-connect/ui
+   > ```
+   >
+   > El launcher pasa `--ui-directory /usr/local/share/wifi-connect/ui`
+   > automáticamente (configurable con `CAFELAB_UI_DIR`).
 
 2. **Instalar el launcher y el servicio** (desde esta carpeta, copiada a la Pi):
 
