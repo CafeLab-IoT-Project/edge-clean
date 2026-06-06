@@ -1,0 +1,13 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<!--
+  Anuncia el edge en la red local vía mDNS para que el ESP32 lo encuentre
+  sin IP fija. Copiar a: /etc/avahi/services/cafelab-edge.service
+-->
+<service-group>
+  <name replace-wildcards="yes">CafeLab Edge on %h</name>
+  <service>
+    <type>_http._tcp</type>
+    <port>5000</port>
+  </service>
+</service-group>

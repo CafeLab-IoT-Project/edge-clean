@@ -9,6 +9,9 @@ class SensorReadingModel(BaseModel):
     temperature = FloatField()
     humidity = FloatField()
     recorded_at = DateTimeField(index=True)
+    # Outbox flags for edge -> backend synchronization.
+    is_synced = BooleanField(default=False, index=True)
+    synced_at = DateTimeField(null=True)
 
     class Meta:
         table_name = "sensor_readings"

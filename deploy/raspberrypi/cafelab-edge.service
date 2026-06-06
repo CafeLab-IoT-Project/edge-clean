@@ -1,0 +1,23 @@
+[Unit]
+Description=CafeLab Edge API (Flask)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Ajusta User y rutas si tu usuario/carpeta no son pi / /home/pi/edge-clean
+User=pi
+WorkingDirectory=/home/pi/edge-clean
+Environment=EDGE_HOST=0.0.0.0
+Environment=EDGE_PORT=5000
+Environment=EDGE_DEBUG=0
+# Sincronización con el backend (opcional): descomenta y completa
+#Environment=BACKEND_BASE_URL=http://192.168.1.100:8080
+#Environment=BACKEND_SERVICE_EMAIL=edge@cafelab.com
+#Environment=BACKEND_SERVICE_PASSWORD=cambia-esto
+ExecStart=/home/pi/edge-clean/.venv/bin/python /home/pi/edge-clean/app.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

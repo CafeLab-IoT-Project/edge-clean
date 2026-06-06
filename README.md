@@ -65,6 +65,7 @@ http://127.0.0.1:5000
 | GET | `/api/v1/edge/readings` | No | Lista lecturas recientes |
 | GET | `/api/v1/edge/sensor-status` | No | Consulta estado ONLINE/OFFLINE del sensor |
 | GET | `/api/v1/edge/actuator-events` | No | Lista eventos recientes del actuador |
+| POST | `/api/v1/edge/sync` | `X-API-Key` | Fuerza una sincronizacion con el backend |
 
 Los endpoints protegidos requieren:
 
@@ -200,3 +201,39 @@ Invoke-RestMethod `
   `WARNING`.
 - Si todo esta dentro del rango, el estado es `OPTIMAL`.
 - Si el sensor no envia lecturas por mas de 2 minutos, se considera `OFFLINE`.
+
+## Sincronizacion con el backend (edge -> backend)
+
+El edge funciona de forma autonoma frente al dispositivo (responde el comando del
+actuador al instante, incluso sin internet) y reconcilia los datos con el backend
+Java de CafeLab en segundo plano.
+
+Flujo:
+
+1. **Identidad**: el edge actua como cuenta de servicio. Firma con
+   `POST /api/v1/authentication/sign-in` (email + password), cachea el JWT y lo
+   renueva automaticamente ante un `401`.
+2. **Mapeo**: cada dispositivo se asocia a un `coffeeLotId` numerico del backend a
+   traves de su campo `lotId`. Sin `lotId`, ese dispositivo no se sincroniza.
+3. **Outbox**: cada lectura se guarda localmente con `is_synced = false`. Un worker
+   en segundo plano envia las pendientes a `POST /api/v1/telemetry-records` y las
+   marca como sincronizadas. Si el backend no responde, se reintenta en el
+   siguiente ciclo (resiliencia offline).
+4. **Umbrales**: el backend es la fuente de verdad. El worker hace pull de
+   `GET /api/v1/environment-thresholds/coffee-lot/{coffeeLotId}` y actualiza los
+   umbrales locales. Los eventos del actuador permanecen solo en el edge.
+
+### Configuracion (variables de entorno)
+
+| Variable | Default | Descripcion |
+|---|---|---|
+| `BACKEND_BASE_URL` | `http://localhost:8080` | URL del backend Java |
+| `BACKEND_SERVICE_EMAIL` | — | Email de la cuenta de servicio |
+| `BACKEND_SERVICE_PASSWORD` | — | Password de la cuenta de servicio |
+| `BACKEND_SYNC_ENABLED` | `true` | Activa la sincronizacion |
+| `BACKEND_SYNC_INTERVAL_SECONDS` | `30` | Periodo del worker |
+| `BACKEND_TIMEOUT_SECONDS` | `5` | Timeout de las llamadas HTTP |
+
+Si no se definen `BACKEND_SERVICE_EMAIL` y `BACKEND_SERVICE_PASSWORD`, la
+sincronizacion queda **deshabilitada** y el edge corre de forma 100% standalone
+(comportamiento original).

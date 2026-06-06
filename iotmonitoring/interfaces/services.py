@@ -172,6 +172,28 @@ def get_sensor_status():
     }), 200
 
 
+@iotmonitoring_api.route("/api/v1/edge/sync", methods=["POST"])
+def trigger_sync():
+    auth_result = authenticate_request()
+    if auth_result:
+        return auth_result
+
+    from iotmonitoring.application.sync_services import TelemetrySyncService
+
+    service = TelemetrySyncService()
+    try:
+        push_result = service.push_pending_readings()
+        thresholds_updated = service.pull_all_thresholds()
+    except Exception as error:  # noqa: BLE001 - surface backend issues to caller
+        return jsonify({"error": f"sync failed: {error}"}), 502
+
+    return jsonify({
+        "readingsPushed": push_result["pushed"],
+        "readingsSkipped": push_result["skipped"],
+        "thresholdsUpdated": thresholds_updated,
+    }), 200
+
+
 @iotmonitoring_api.route("/api/v1/edge/actuator-events", methods=["GET"])
 def get_actuator_events():
     device_id = _get_device_id()

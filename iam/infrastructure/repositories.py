@@ -47,6 +47,13 @@ class DeviceRepository:
         return device
 
     @staticmethod
+    def find_all() -> list[Device]:
+        return [
+            Device(device.device_id, device.api_key, device.lot_id, device.created_at)
+            for device in DeviceModel.select()
+        ]
+
+    @staticmethod
     def get_or_create_development_device() -> Device:
         device, _ = DeviceModel.get_or_create(
             device_id="tracksilo-001",

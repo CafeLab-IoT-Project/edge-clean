@@ -1,0 +1,16 @@
+[Unit]
+Description=CafeLab edge WiFi provisioning (captive portal)
+# wifi-connect drives NetworkManager, so wait for it.
+Requires=NetworkManager.service
+After=NetworkManager.service network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cafelab-wifi-portal.sh
+# If the portal crashes, retry; on a clean exit (already online / provisioned)
+# it simply stays stopped until the next boot.
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

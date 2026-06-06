@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import peewee
 
 from iotmonitoring.domain.entities import ActuatorEvent, SensorReading, StorageThresholds
@@ -64,6 +66,35 @@ class SensorReadingRepository:
             )
             for record in records
         ]
+
+    @staticmethod
+    def find_unsynced(limit: int = 50) -> list[SensorReading]:
+        records = (
+            SensorReadingModel
+            .select()
+            .where(SensorReadingModel.is_synced == False)  # noqa: E712 (peewee needs ==)
+            .order_by(SensorReadingModel.recorded_at.asc(), SensorReadingModel.id.asc())
+            .limit(limit)
+        )
+        return [
+            SensorReading(
+                record.device_id,
+                record.temperature,
+                record.humidity,
+                record.recorded_at,
+                record.id,
+            )
+            for record in records
+        ]
+
+    @staticmethod
+    def mark_synced(reading_id: int, synced_at: datetime | None = None) -> None:
+        (
+            SensorReadingModel
+            .update(is_synced=True, synced_at=synced_at or datetime.now(timezone.utc))
+            .where(SensorReadingModel.id == reading_id)
+            .execute()
+        )
 
 
 class StorageThresholdsRepository:
