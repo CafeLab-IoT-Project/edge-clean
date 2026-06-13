@@ -101,6 +101,19 @@ class SensorReadingRepository:
         )
 
     @staticmethod
+    def count_by_device(device_id: str) -> int:
+        return (
+            SensorReadingModel
+            .select()
+            .where(SensorReadingModel.device_id == device_id)
+            .count()
+        )
+
+    @staticmethod
+    def delete_all() -> int:
+        return SensorReadingModel.delete().execute()
+
+    @staticmethod
     def mark_synced(reading_id: int, synced_at: datetime | None = None) -> None:
         (
             SensorReadingModel
@@ -136,6 +149,10 @@ class StorageThresholdsRepository:
             record.id,
             record.is_current,
         )
+
+    @staticmethod
+    def delete_all() -> int:
+        return StorageThresholdsModel.delete().execute()
 
     @staticmethod
     def find_current_by_device_id(device_id: str) -> StorageThresholds | None:
@@ -179,6 +196,10 @@ class ActuatorEventRepository:
             record.id,
             record.resolved_at,
         )
+
+    @staticmethod
+    def delete_all() -> int:
+        return ActuatorEventModel.delete().execute()
 
     @staticmethod
     def find_recent_by_device_id(device_id: str, limit: int = 10) -> list[ActuatorEvent]:

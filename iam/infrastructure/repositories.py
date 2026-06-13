@@ -54,6 +54,20 @@ class DeviceRepository:
         ]
 
     @staticmethod
+    def update_lot_id(device_id: str, lot_id: str | None) -> bool:
+        updated = (
+            DeviceModel
+            .update(lot_id=lot_id)
+            .where(DeviceModel.device_id == device_id)
+            .execute()
+        )
+        return updated > 0
+
+    @staticmethod
+    def delete_all() -> int:
+        return DeviceModel.delete().execute()
+
+    @staticmethod
     def get_or_create_development_device() -> Device:
         device, _ = DeviceModel.get_or_create(
             device_id="tracksilo-001",

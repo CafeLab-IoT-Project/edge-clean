@@ -63,6 +63,28 @@ def register_device():
         return jsonify({"error": str(error)}), status
 
 
+@iam_api.route("/devices/announce", methods=["POST"])
+def announce_device():
+    """Phone-home self-enrollment: the device introduces itself by id (its MAC).
+
+    Returns its api_key (generated on first contact) so the firmware can
+    authenticate subsequent readings without being pre-flashed.
+    """
+    data = _request_json()
+    device_id = _get_device_id(data)
+    if not device_id:
+        return jsonify({"error": "Missing device_id"}), 400
+
+    try:
+        device = iam_service.announce_device(device_id)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    resource = _device_resource(device, include_api_key=True)
+    resource["assigned"] = device.lot_id is not None
+    return jsonify(resource), 200
+
+
 @iam_api.route("/authentication", methods=["POST"])
 def authenticate_device():
     auth_result = authenticate_request()

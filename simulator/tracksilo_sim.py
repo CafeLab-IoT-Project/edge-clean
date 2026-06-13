@@ -2,19 +2,25 @@
 """TrackSilo - simulador del ESP32 para probar el flujo contra el edge.
 
 Imita el firmware real (firmware/tracksilo-esp32/tracksilo-esp32.ino):
-  1. (opcional) registra el dispositivo en el edge y obtiene su api_key.
+  1. se ANUNCIA al edge (phone-home) con su device_id y recibe su api_key.
   2. en loop: genera T/H, hace POST /api/v1/edge/readings con la X-API-Key,
      imprime status + actuatorCommand y "aplica" el actuador.
 
-Ejemplos:
-  # auto-registra el device (lot 1) contra el Pi y manda lecturas cada 5s
-  python tracksilo_sim.py --edge http://raspberrypi.local:5000 --lot-id 1
+El lote NO se configura aquí: se asigna desde la web /onboarding del edge.
+Mientras no tenga lote, el edge bufferea las lecturas sin sincronizar.
 
-  # usa un api_key ya emitido y manda 3 lecturas en escenario "peligro"
-  python tracksilo_sim.py --api-key AbC123 --profile danger --count 3
+Ejemplos:
+  # se anuncia contra el Pi y manda lecturas cada 5s
+  python tracksilo_sim.py --edge http://raspberrypi.local:5000
+
+  # simula otro dispositivo (otro device_id => aparece como otro IoT en la web)
+  python tracksilo_sim.py --device-id esp32-sim-02
+
+  # usa un api_key ya emitido y manda 3 lecturas en escenario "caliente"
+  python tracksilo_sim.py --api-key AbC123 --profile hot --count 3
 
   # una sola lectura y salir
-  python tracksilo_sim.py --api-key AbC123 --once
+  python tracksilo_sim.py --once
 """
 from __future__ import annotations
 
@@ -34,25 +40,21 @@ PROFILES = {
 }
 
 
-def register_device(edge: str, device_id: str, lot_id: str) -> str:
-    """Da de alta el device en el edge y devuelve su api_key (idempotente-ish)."""
+def announce(edge: str, device_id: str) -> str:
+    """Phone-home: se anuncia al edge y obtiene su api_key (idempotente)."""
     resp = requests.post(
-        f"{edge}/api/v1/iam/devices",
-        json={"device_id": device_id, "lot_id": lot_id},
+        f"{edge}/api/v1/iam/devices/announce",
+        json={"deviceId": device_id},
         timeout=10,
     )
-    if resp.status_code == 201:
-        api_key = resp.json()["api_key"]
-        print(f"[alta] device '{device_id}' registrado (lot={lot_id}) api_key={api_key}")
+    if resp.status_code == 200:
+        body = resp.json()
+        assigned = body.get("assigned")
+        api_key = body["api_key"]
+        estado = "con lote" if assigned else "PENDIENTE (asígnale un lote en /onboarding)"
+        print(f"[announce] '{device_id}' {estado}; api_key={api_key}")
         return api_key
-    if resp.status_code == 409:
-        print(
-            f"[alta] '{device_id}' ya existe. No puedo recuperar su api_key; "
-            "pásalo con --api-key o usa otro --device-id.",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-    print(f"[alta] fallo {resp.status_code}: {resp.text}", file=sys.stderr)
+    print(f"[announce] fallo {resp.status_code}: {resp.text}", file=sys.stderr)
     sys.exit(2)
 
 
@@ -93,9 +95,7 @@ def main() -> None:
     parser.add_argument("--device-id", default="tracksilo-sim-001",
                         help="id del dispositivo simulado")
     parser.add_argument("--api-key", default=None,
-                        help="api_key del device; si se omite, se auto-registra")
-    parser.add_argument("--lot-id", default="1",
-                        help="coffeeLotId para el alta (debe existir en el backend)")
+                        help="api_key del device; si se omite, se anuncia y la obtiene")
     parser.add_argument("--profile", choices=list(PROFILES), default="optimal",
                         help="escenario de valores a generar")
     parser.add_argument("--interval", type=float, default=5.0,
@@ -107,7 +107,7 @@ def main() -> None:
     args = parser.parse_args()
 
     edge = args.edge.rstrip("/")
-    api_key = args.api_key or register_device(edge, args.device_id, args.lot_id)
+    api_key = args.api_key or announce(edge, args.device_id)
 
     total = 1 if args.once else args.count
     sent = 0

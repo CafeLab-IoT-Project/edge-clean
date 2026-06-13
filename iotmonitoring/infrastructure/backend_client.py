@@ -131,6 +131,19 @@ class BackendClient:
             f"telemetry failed ({response.status_code}): {response.text}"
         )
 
+    def get_coffee_lots(self) -> list:
+        """List the coffee lots owned by the service account (for lot assignment)."""
+        response = self._request("GET", "/api/v1/coffee-lots")
+        if response.status_code == 200:
+            return response.json() or []
+        if 400 <= response.status_code < 500:
+            raise BackendRejectedError(
+                f"coffee-lots rejected ({response.status_code}): {response.text}"
+            )
+        raise BackendUnavailableError(
+            f"coffee-lots failed ({response.status_code}): {response.text}"
+        )
+
     def get_thresholds(self, coffee_lot_id: int) -> dict | None:
         response = self._request(
             "GET", f"/api/v1/environment-thresholds/coffee-lot/{coffee_lot_id}"
