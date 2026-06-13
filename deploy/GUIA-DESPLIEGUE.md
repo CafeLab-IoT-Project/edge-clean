@@ -142,21 +142,21 @@ sin afectar el flujo dispositivo↔edge.
    sudo systemctl daemon-reload && sudo systemctl restart cafelab-edge.service
    ```
 
-3. Asegura que el `coffeeLot` exista en el backend y registra el dispositivo en
-   el edge con ese `lotId`:
+3. Asegura que el `coffeeLot` exista en el backend. El dispositivo **NO se
+   registra a mano**: el ESP32 se auto-anuncia (paso 6) y luego le asignas el
+   lote desde `/onboarding` (o por curl con el `deviceId` que viste en el serial):
 
    ```bash
-   curl -X POST http://cafelab-edge.local:5000/api/v1/iam/devices \
-     -H "Content-Type: application/json" \
-     -d '{"deviceId":"tracksilo-001","lotId":"7"}'
+   curl -X POST http://raspberrypi.local:5000/api/v1/edge/devices/esp32-aabbccddeeff/assign \
+     -H "Content-Type: application/json" -d '{"lotId":"7"}'
    ```
 
-4. Fuerza una sincronización:
+4. Fuerza una sincronización (recupera el `api_key` re-anunciando, es idempotente):
 
    ```bash
-   curl -X POST http://cafelab-edge.local:5000/api/v1/edge/sync \
+   curl -X POST http://raspberrypi.local:5000/api/v1/edge/sync \
      -H "Content-Type: application/json" -H "X-API-Key: <api_key>" \
-     -d '{"deviceId":"tracksilo-001"}'
+     -d '{"deviceId":"esp32-aabbccddeeff"}'
    ```
 
 > ✅ **Validación:** `/edge/sync` responde con contadores
@@ -216,24 +216,30 @@ nmcli device status      # wlan0 debe quedar 'connected' a tu red
 ## PASO 6 — Flashear el ESP32 (TrackSilo)
 
 Detalle en [`../firmware/tracksilo-esp32/README.md`](../firmware/tracksilo-esp32/README.md).
+Firmware **genérico**: no se hornea `device_id` ni `api_key` (auto-enroll).
 
-1. Obtén la API key (o usa el dev `tracksilo-001` / `test-api-key-123`):
+0. (Para descubrimiento por mDNS) instala el servicio Avahi en el Pi:
 
    ```bash
-   curl -X POST http://cafelab-edge.local:5000/api/v1/iam/devices \
-     -H "Content-Type: application/json" \
-     -d '{"deviceId":"tracksilo-001","lotId":"7"}'
+   sudo cp ~/edge-clean/deploy/raspberrypi/avahi-cafelab-edge.service \
+           /etc/avahi/services/cafelab-edge.service
+   sudo systemctl restart avahi-daemon
+   avahi-browse -rt _cafelab._tcp     # debe listar el edge
    ```
 
-2. En Arduino IDE: instala el core **ESP32** y las librerías **WiFiManager**,
+1. En Arduino IDE: instala el core **ESP32** y las librerías **WiFiManager**,
    **DHT sensor library** (+ Adafruit Unified Sensor) y **ArduinoJson v7**.
-3. Edita la sección CONFIG del `.ino` con `DEVICE_ID` y `API_KEY`.
-4. Conecta el ESP32 por USB, selecciona placa/puerto y sube el sketch.
-5. Abre el Monitor Serie a **115200**. Conecta el cel al AP `TrackSilo-Setup` y
+2. (Opcional) En la sección CONFIG del `.ino`, ajusta `EDGE_FALLBACK_IP` con la
+   IP del Pi (respaldo si mDNS falla). No hay que poner `DEVICE_ID` ni `API_KEY`.
+3. Conecta el ESP32 por USB, selecciona placa/puerto y sube el sketch.
+4. Abre el Monitor Serie a **115200**. Conecta el cel al AP `TrackSilo-Setup` y
    mete el WiFi del café.
+5. El ESP32 se **anuncia solo** → en `/onboarding` aparece "pendiente" →
+   **asígnale el lote**.
 
-> ✅ **Validación:** en el Monitor Serie ves `[wifi] conectado`, `[edge]
-> encontrado en <ip>` y respuestas `201` con `actuatorCommand`.
+> ✅ **Validación:** en el Monitor Serie ves `[wifi] conectado`, una línea
+> `[mdns] edge por servicio...` (o `usando IP fija`), `[announce] ok` y
+> respuestas `201` con `actuatorCommand`.
 
 ---
 
@@ -246,8 +252,8 @@ Detalle en [`../firmware/tracksilo-esp32/README.md`](../firmware/tracksilo-esp32
 3. Verifica el registro en el edge:
 
    ```bash
-   curl "http://cafelab-edge.local:5000/api/v1/edge/readings/latest?deviceId=tracksilo-001"
-   curl "http://cafelab-edge.local:5000/api/v1/edge/actuator-events?deviceId=tracksilo-001"
+   curl "http://raspberrypi.local:5000/api/v1/edge/readings/latest?deviceId=esp32-aabbccddeeff"
+   curl "http://raspberrypi.local:5000/api/v1/edge/actuator-events?deviceId=esp32-aabbccddeeff"
    ```
 4. (Si hiciste el paso 4) confirma que la telemetría llegó al backend
    (`GET /api/v1/telemetry-records/coffee-lot/7`).

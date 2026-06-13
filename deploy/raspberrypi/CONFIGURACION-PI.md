@@ -4,8 +4,8 @@ Resumen de **qué corre en el Pi**, **dónde vive cada archivo** y **los comando
 que puedes usar para operarlo. Pensado como chuleta para no olvidar qué existe.
 
 > Hostname actual del Pi: **`raspberrypi`** → se llega por `raspberrypi.local`.
-> (El firmware del ESP32 busca `cafelab-edge.local` por defecto; ver
-> [edge-discovery.md](edge-discovery.md) si quieres cambiar el hostname.)
+> El ESP32 descubre el edge por **servicio mDNS `_cafelab._tcp`** (Avahi), con
+> el hostname y la IP fija como respaldo; ver [edge-discovery.md](edge-discovery.md).
 
 ---
 

@@ -61,83 +61,64 @@ curl http://<PI>:5000/health
 
 ---
 
-## Paso 1 — Registrar el dispositivo en el EDGE → obtener su API key
+## Paso 1 — Flashear el ESP32 (firmware genérico, UNA sola vez)
 
-Sin auth (es el alta). Devuelve el `api_key` a flashear.
-```bash
-curl -X POST http://<PI>:5000/api/v1/iam/devices \
-  -H "Content-Type: application/json" \
-  -d '{"device_id":"tracksilo-001","lot_id":"<LOT_ID>"}'
-```
-Respuesta (201):
-```json
-{
-  "device_id": "tracksilo-001",
-  "lot_id": "<LOT_ID>",
-  "api_key": "AbC123...",
-  "created_at": "2026-..Z"
-}
-```
-- `device_id`: nombre único del ESP32 (lo eliges tú).
-- `lot_id`: el coffeeLotId del backend (pre-req b).
-- Si ya existe → 409. Usa otro `device_id` o reutiliza el api_key previo.
-
----
-
-## Paso 2 — Flashear el ESP32
-
-En `firmware/tracksilo-esp32/tracksilo-esp32.ino`, edita el bloque CONFIG:
+Ya **no se hornea** `device_id` ni `api_key`: el `device_id` es la MAC y el
+`api_key` lo obtiene solo (auto-enroll). En
+`firmware/tracksilo-esp32/tracksilo-esp32.ino`, bloque CONFIG:
 ```cpp
-static const char* DEVICE_ID = "tracksilo-001";        // mismo del paso 1
-static const char* API_KEY   = "AbC123...";            // api_key del paso 1
-
-static const char* EDGE_HOST     = "raspberrypi";      // ⚠️ hostname del Pi = raspberrypi, NO cafelab-edge
-static const uint16_t EDGE_PORT  = 5000;
-static const char* EDGE_FALLBACK_IP = "<PI_IP>";       // IP del Pi por si mDNS falla (recomendado)
+static const char* DEVICE_ID_OVERRIDE = "";              // vacío = usar la MAC
+static const char* EDGE_SERVICE     = "cafelab";         // descubrimiento por _cafelab._tcp
+static const char* EDGE_HOST        = "raspberrypi";     // hostname mDNS (respaldo)
+static const char* EDGE_FALLBACK_IP = "<PI_IP>";         // respaldo si mDNS falla
 ```
-> **Hallazgo #8**: el firmware busca `cafelab-edge.local` por defecto, pero el
-> hostname del Pi quedó como `raspberrypi`. Cambia `EDGE_HOST` a `"raspberrypi"`
-> **y** pon `EDGE_FALLBACK_IP` con la IP.
-
 Librerías (Library Manager): **WiFiManager** (tzapu), **DHT sensor library**
-(Adafruit) + **Adafruit Unified Sensor**, **ArduinoJson v7**. Sube el sketch.
+(Adafruit) + **Adafruit Unified Sensor**, **ArduinoJson v7** (`Preferences` y
+`ESPmDNS` vienen con el core). Sube el sketch.
+
+> Para que el descubrimiento por servicio funcione, instala el servicio Avahi en
+> el Pi (ver `deploy/raspberrypi/edge-discovery.md`).
 
 ---
 
-## Paso 3 — Conectar el ESP32 a la WiFi (portal del ESP32)
+## Paso 2 — WiFi + auto-enroll (phone-home)
 
-Al arrancar sin WiFi guardado abre el AP **`TrackSilo-Setup`**:
-1. Conéctate a `TrackSilo-Setup` con el celular/laptop.
-2. Portal cautivo → elige tu red WiFi (la **misma del Pi**) → clave.
-3. El ESP32 se reinicia y conecta.
+Al arrancar sin WiFi → AP **`TrackSilo-Setup`** → conéctate, elige la WiFi (la
+**misma del Pi**). Monitor Serie (115200) — esperado:
+```
+[wifi] conectado, IP 192.168.18.x
+[id] deviceId = esp32-aabbccddeeff
+[mdns] edge por servicio 'cafelab': 192.168.18.129:5000 (raspberrypi)
+[announce] ok; PENDIENTE: asigna un lote en /onboarding
+[dht] T=21.3C H=58.0%  ->  201 status=... actuador=...
+```
+- El ESP32 **se anunció solo** → aparece como **pendiente** en la web.
+- `[mdns] usando IP fija ...` → el mDNS falló, pero la IP de respaldo lo cubre.
+- El `api_key` queda guardado en NVS; no lo escribes en ningún lado.
 
-Monitor Serie (115200 baudios) — esperado:
-```
-[wifi] conectado, IP 192.168.1.x
-[edge] encontrado en 192.168.1.50
-[dht] T=21.3C H=58.0%
-[edge] 201 {"readingId":..,"status":"OPTIMAL","actuatorCommand":"NONE",...}
-[actuador] NONE
-```
-- Manda una lectura cada 30 s (`READ_INTERVAL_MS`).
-- `401: revisa DEVICE_ID / API_KEY` → no coinciden con el paso 1.
-- `POST fallo` → no alcanza el edge (misma red? IP/hostname correctos?).
+---
 
-Lo que manda el firmware:
+## Paso 3 — Asignar el lote desde la web
+
+`/onboarding` → **Dispositivos detectados** → **Actualizar** → el `esp32-<mac>`
+aparece **pendiente** → elige el lote en el dropdown → **Asignar**.
+
+O por curl (sustituye el `device_id` real que viste en el serial):
+```bash
+curl -X POST http://<PI>:5000/api/v1/edge/devices/esp32-aabbccddeeff/assign \
+  -H "Content-Type: application/json" -d '{"lotId":"<LOT_ID>"}'
 ```
-POST http://<PI>:5000/api/v1/edge/readings
-Header: X-API-Key: AbC123...
-Body: {"deviceId":"tracksilo-001","temperature":21.3,"humidity":58.0}
-```
+Hasta que tenga lote, el edge **bufferea** las lecturas (responde al actuador con
+umbrales por defecto) pero **no** las sincroniza al backend.
 
 ---
 
 ## Paso 4 — Verificar la lectura EN EL EDGE (desde la laptop)
 ```bash
-curl "http://<PI>:5000/api/v1/edge/readings/latest?deviceId=tracksilo-001"
+curl "http://<PI>:5000/api/v1/edge/readings/latest?deviceId=esp32-aabbccddeeff"
 ```
 ```json
-{"readingId":12,"deviceId":"tracksilo-001","temperature":21.3,"humidity":58.0,
+{"readingId":12,"deviceId":"esp32-aabbccddeeff","temperature":21.3,"humidity":58.0,
  "status":"OPTIMAL","actuatorCommand":"NONE","recordedAt":"2026-..Z"}
 ```
 Confirma el salto **ESP32 → edge**. ✅
@@ -146,13 +127,19 @@ Confirma el salto **ESP32 → edge**. ✅
 
 ## Paso 5 — Empujar al BACKEND y verificar
 
-El `SyncWorker` empuja solo, pero para **forzarlo ahora** (auth de dispositivo:
-`device_id` en el body + `X-API-Key`):
+El `SyncWorker` empuja solo, pero para **forzarlo ahora** necesitas el `api_key`
+del device (auth). Recupéralo re-anunciando (es idempotente):
+```bash
+curl -X POST http://<PI>:5000/api/v1/iam/devices/announce \
+  -H "Content-Type: application/json" -d '{"deviceId":"esp32-aabbccddeeff"}'
+# -> {"api_key":"AbC123...","assigned":true,...}
+```
+Luego fuerza el sync (`device_id` en el body + `X-API-Key`):
 ```bash
 curl -X POST http://<PI>:5000/api/v1/edge/sync \
   -H "Content-Type: application/json" \
   -H "X-API-Key: AbC123..." \
-  -d '{"device_id":"tracksilo-001"}'
+  -d '{"device_id":"esp32-aabbccddeeff"}'
 ```
 ```json
 {"readingsPushed": 3, "readingsSkipped": 0, "thresholdsUpdated": 1}
@@ -179,11 +166,12 @@ Deberías ver las lecturas reales del ESP32. Cierra el salto **edge → backend*
 
 | # | Quién llama | Método + endpoint | Auth | Para qué |
 |---|---|---|---|---|
-| 1 | Tú (alta) | `POST /api/v1/iam/devices` | — | registrar device, obtener `api_key` |
-| 2 | ESP32 | `POST /api/v1/edge/readings` | `X-API-Key` + deviceId | enviar lectura |
-| 3 | Tú (check) | `GET /api/v1/edge/readings/latest` | — | ver última lectura en el edge |
-| 4 | Tú (push) | `POST /api/v1/edge/sync` | `X-API-Key` + deviceId | forzar envío al backend |
-| 5 | Tú (check) | `GET /api/v1/telemetry-records/coffee-lot/{id}` | `Bearer JWT` | ver dato en el backend |
+| 1 | ESP32 (auto) | `POST /api/v1/iam/devices/announce` | — | auto-enroll; emite/recupera `api_key` |
+| 2 | Tú (web) | `POST /api/v1/edge/devices/{id}/assign` | — | asignar lote al device |
+| 3 | ESP32 | `POST /api/v1/edge/readings` | `X-API-Key` + deviceId | enviar lectura |
+| 4 | Tú (check) | `GET /api/v1/edge/readings/latest` | — | ver última lectura en el edge |
+| 5 | Tú (push) | `POST /api/v1/edge/sync` | `X-API-Key` + deviceId | forzar envío al backend |
+| 6 | Tú (check) | `GET /api/v1/telemetry-records/coffee-lot/{id}` | `Bearer JWT` | ver dato en el backend |
 
 ---
 

@@ -10,7 +10,9 @@
  * Flujo:
  *   1. WiFiManager: si no hay WiFi guardado, abre el AP "TrackSilo-Setup" con
  *      portal cautivo para que el usuario ingrese la red del cafe.
- *   2. mDNS: resuelve el edge en "cafelab-edge.local" (sin IP fija).
+ *   2. Resuelve el edge por IP fija (EDGE_FALLBACK_IP) o, si está vacía, por
+ *      mDNS (<hostname>.local). En la práctica el mDNS del ESP32 suele fallar,
+ *      así que la IP fija es el camino confiable.
  *   3. Announce (phone-home): POST /api/v1/iam/devices/announce {deviceId:MAC}
  *      -> el edge devuelve la api_key, que se guarda en NVS (Preferences).
  *   4. Loop: lee el DHT22 y hace POST /api/v1/edge/readings con la api_key.
@@ -33,11 +35,18 @@
 #include <DHT.h>
 
 // ===================== CONFIG (igual para todos los dispositivos) =====================
-static const char* DEVICE_PREFIX = "esp32-";        // device_id = esp32-<mac>
+// device_id = esp32-<mac> automáticamente. Para SIMULAR otro IoT en la misma
+// placa, pon aquí un id fijo (vacío = usar la MAC).
+static const char* DEVICE_ID_OVERRIDE = "";
+static const char* DEVICE_PREFIX      = "esp32-";
 
-static const char* EDGE_HOST     = "cafelab-edge";   // mDNS: cafelab-edge.local
-static const uint16_t EDGE_PORT  = 5000;
-static const char* EDGE_FALLBACK_IP = "";            // ej. "192.168.18.129" si mDNS falla
+// Descubrimiento del edge (en cascada): 1) servicio mDNS _cafelab._tcp,
+// 2) hostname mDNS, 3) IP fija de respaldo. El servicio mDNS es lo más fiable en
+// ESP32 (queryHost suele fallar); el edge lo anuncia vía Avahi en el Pi.
+static const char* EDGE_SERVICE     = "cafelab";        // => _cafelab._tcp (avahi del Pi)
+static const char* EDGE_HOST        = "raspberrypi";    // hostname mDNS (sin ".local")
+static const char* EDGE_FALLBACK_IP = "192.168.18.129"; // respaldo si mDNS falla (deja vacío para solo-mDNS)
+static const uint16_t EDGE_PORT     = 5000;
 
 static const uint8_t DHT_PIN      = 4;               // dato del DHT22
 static const uint8_t DHT_KIND     = DHT22;
@@ -54,6 +63,9 @@ String apiKey;
 unsigned long lastReadAt = 0;
 
 String computeDeviceId() {
+  if (strlen(DEVICE_ID_OVERRIDE) > 0) {
+    return String(DEVICE_ID_OVERRIDE);   // id fijo para simular otro IoT
+  }
   String mac = WiFi.macAddress();   // formato AA:BB:CC:DD:EE:FF
   mac.replace(":", "");
   mac.toLowerCase();
@@ -61,16 +73,35 @@ String computeDeviceId() {
 }
 
 IPAddress resolveEdge() {
-  for (int i = 0; i < 5; i++) {
-    IPAddress ip = MDNS.queryHost(EDGE_HOST);
-    if (ip != IPAddress(0, 0, 0, 0)) {
+  // 1) Descubrimiento por SERVICIO mDNS (_cafelab._tcp). Es lo más fiable en
+  //    ESP32 y no depende de adivinar el hostname; el Pi lo anuncia vía Avahi.
+  for (int attempt = 0; attempt < 3; attempt++) {
+    int n = MDNS.queryService(EDGE_SERVICE, "tcp");
+    if (n > 0) {
+      IPAddress ip = MDNS.IP(0);
+      Serial.printf("[mdns] edge por servicio '%s': %s:%u (%s)\n",
+                    EDGE_SERVICE, ip.toString().c_str(), MDNS.port(0),
+                    MDNS.hostname(0).c_str());
       return ip;
     }
     delay(500);
   }
+
+  // 2) Resolución por hostname (sin ".local"), con reintentos.
+  for (int i = 0; i < 5; i++) {
+    IPAddress ip = MDNS.queryHost(EDGE_HOST);
+    if (ip != IPAddress(0, 0, 0, 0)) {
+      Serial.printf("[mdns] edge por host '%s': %s\n", EDGE_HOST, ip.toString().c_str());
+      return ip;
+    }
+    delay(500);
+  }
+
+  // 3) Respaldo: IP fija (deja EDGE_FALLBACK_IP vacío para forzar solo-mDNS).
   if (strlen(EDGE_FALLBACK_IP) > 0) {
     IPAddress ip;
     if (ip.fromString(EDGE_FALLBACK_IP)) {
+      Serial.printf("[mdns] mDNS falló; usando IP fija %s\n", EDGE_FALLBACK_IP);
       return ip;
     }
   }

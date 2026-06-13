@@ -6,6 +6,13 @@
 -->
 <service-group>
   <name replace-wildcards="yes">CafeLab Edge on %h</name>
+  <!-- Servicio dedicado para que el ESP32 descubra el edge sin ambigüedad
+       (MDNS.queryService("cafelab","tcp")). Más fiable que resolver por hostname. -->
+  <service>
+    <type>_cafelab._tcp</type>
+    <port>5000</port>
+  </service>
+  <!-- También como HTTP genérico (navegable con avahi-browse / apps). -->
   <service>
     <type>_http._tcp</type>
     <port>5000</port>
