@@ -178,3 +178,7 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/python
 
 .idea
+
+/edge_clean.db
+edge_clean.db-shm
+edge_clean.db-wal
