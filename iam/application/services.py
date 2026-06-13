@@ -23,3 +23,6 @@ class IamApplicationService:
 
     def get_or_create_development_device(self) -> Device:
         return self.device_repository.get_or_create_development_device()
+
+    def get_all_devices(self) -> list:
+        return DeviceRepository.find_all()
