@@ -74,3 +74,13 @@ def authenticate_device():
         "authenticated": True,
         "device_id": _get_device_id(data),
     }), 200
+
+
+@iam_api.route("/devices", methods=["GET"])
+def list_all_devices():
+    try:
+        devices = iam_service.get_all_devices()
+        resources = [_device_resource(device, include_api_key=True) for device in devices]
+        return jsonify({"devices": resources}), 200
+    except Exception as error:
+        return jsonify({"error": f"Devices could not be listed: {error}"}), 500
