@@ -1,3 +1,6 @@
+import logging
+import os
+
 from flask import Flask, jsonify
 
 from iam.application.services import IamApplicationService
@@ -6,6 +9,13 @@ from iotmonitoring.interfaces.account_services import onboarding_api
 from iotmonitoring.interfaces.services import iotmonitoring_api
 from shared.infrastructure.database import init_db
 from shared.infrastructure.sync_worker import worker as sync_worker
+
+# Emit INFO logs (sync pushes/pulls) to stderr -> systemd journal.
+# Override with EDGE_LOG_LEVEL=DEBUG/WARNING.
+logging.basicConfig(
+    level=os.environ.get("EDGE_LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 app = Flask(__name__)
 app.register_blueprint(iam_api)
@@ -31,8 +41,6 @@ def status():
 
 
 if __name__ == "__main__":
-    import os
-
     # Bind to 0.0.0.0 so devices on the LAN (the ESP32) can reach the edge.
     # 127.0.0.1 would only be reachable from the Pi itself.
     host = os.environ.get("EDGE_HOST", "0.0.0.0")

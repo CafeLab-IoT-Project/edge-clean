@@ -11,6 +11,9 @@ WorkingDirectory=/home/pi/edge-clean
 Environment=EDGE_HOST=0.0.0.0
 Environment=EDGE_PORT=5000
 Environment=EDGE_DEBUG=0
+# Logs en vivo (sin buffer) hacia el journal; sube a DEBUG si necesitas más detalle.
+Environment=PYTHONUNBUFFERED=1
+Environment=EDGE_LOG_LEVEL=INFO
 # Sincronización con el backend (opcional): descomenta y completa
 #Environment=BACKEND_BASE_URL=http://192.168.1.100:8080
 #Environment=BACKEND_SERVICE_EMAIL=edge@cafelab.com

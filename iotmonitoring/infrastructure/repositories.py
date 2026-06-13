@@ -92,6 +92,15 @@ class SensorReadingRepository:
         ]
 
     @staticmethod
+    def count_unsynced() -> int:
+        return (
+            SensorReadingModel
+            .select()
+            .where(SensorReadingModel.is_synced == False)  # noqa: E712 (peewee needs ==)
+            .count()
+        )
+
+    @staticmethod
     def mark_synced(reading_id: int, synced_at: datetime | None = None) -> None:
         (
             SensorReadingModel

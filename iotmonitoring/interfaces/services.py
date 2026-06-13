@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, request
 
 from iam.interfaces.services import authenticate_request
 from iotmonitoring.application.services import IoTMonitoringApplicationService
+from shared.infrastructure.sync_worker import worker as sync_worker
 
 iotmonitoring_api = Blueprint("iotmonitoring_api", __name__)
 iot_monitoring_service = IoTMonitoringApplicationService()
@@ -128,6 +129,8 @@ def register_reading():
             data.get("recordedAt") or data.get("recorded_at"),
             request.headers.get("X-API-Key"),
         )
+        # Wake the sync worker so this reading is pushed now, not on the next poll.
+        sync_worker.notify()
         return jsonify(_reading_resource(reading, status, actuator_command)), 201
     except KeyError:
         return jsonify({"error": "Missing required reading fields"}), 400
@@ -187,10 +190,25 @@ def trigger_sync():
     except Exception as error:  # noqa: BLE001 - surface backend issues to caller
         return jsonify({"error": f"sync failed: {error}"}), 502
 
+    from iotmonitoring.infrastructure.repositories import SensorReadingRepository
+
     return jsonify({
         "readingsPushed": push_result["pushed"],
         "readingsSkipped": push_result["skipped"],
         "thresholdsUpdated": thresholds_updated,
+        "readingsPending": SensorReadingRepository.count_unsynced(),
+    }), 200
+
+
+@iotmonitoring_api.route("/api/v1/edge/sync/status", methods=["GET"])
+def sync_status():
+    from iotmonitoring.infrastructure.repositories import SensorReadingRepository
+
+    return jsonify({
+        "pendingReadings": SensorReadingRepository.count_unsynced(),
+        "syncEnabled": sync_worker.config.sync_enabled,
+        "workerRunning": sync_worker.is_running(),
+        "intervalSeconds": sync_worker.config.sync_interval_seconds,
     }), 200
 
 

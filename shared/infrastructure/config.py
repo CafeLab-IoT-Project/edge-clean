@@ -19,7 +19,7 @@ class BackendConfig:
         base_url: str,
         service_email: str | None,
         service_password: str | None,
-        timeout_seconds: float = 5.0,
+        timeout_seconds: float = 10.0,
         sync_enabled: bool = True,
         sync_interval_seconds: int = 30,
     ):
@@ -37,7 +37,7 @@ class BackendConfig:
             base_url=os.environ.get("BACKEND_BASE_URL", "http://localhost:8080"),
             service_email=os.environ.get("BACKEND_SERVICE_EMAIL"),
             service_password=os.environ.get("BACKEND_SERVICE_PASSWORD"),
-            timeout_seconds=float(os.environ.get("BACKEND_TIMEOUT_SECONDS", "5")),
+            timeout_seconds=float(os.environ.get("BACKEND_TIMEOUT_SECONDS", "10")),
             sync_enabled=_as_bool(os.environ.get("BACKEND_SYNC_ENABLED"), default=True),
             sync_interval_seconds=int(os.environ.get("BACKEND_SYNC_INTERVAL_SECONDS", "30")),
         )
@@ -65,7 +65,7 @@ class BackendConfig:
             base_url=account.base_url,
             service_email=account.email,
             service_password=account.password,
-            timeout_seconds=float(os.environ.get("BACKEND_TIMEOUT_SECONDS", "5")),
+            timeout_seconds=float(os.environ.get("BACKEND_TIMEOUT_SECONDS", "10")),
             sync_enabled=_as_bool(os.environ.get("BACKEND_SYNC_ENABLED"), default=True),
             sync_interval_seconds=int(os.environ.get("BACKEND_SYNC_INTERVAL_SECONDS", "30")),
         )
