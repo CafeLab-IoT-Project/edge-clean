@@ -1,3 +1,4 @@
+from collections import namedtuple
 from datetime import datetime, timezone
 
 import peewee
@@ -5,9 +6,12 @@ import peewee
 from iotmonitoring.domain.entities import ActuatorEvent, SensorReading, StorageThresholds
 from iotmonitoring.infrastructure.models import (
     ActuatorEventModel,
+    BackendAccountModel,
     SensorReadingModel,
     StorageThresholdsModel,
 )
+
+BackendAccount = namedtuple("BackendAccount", ["base_url", "email", "password"])
 
 
 class SensorReadingRepository:
@@ -186,3 +190,29 @@ class ActuatorEventRepository:
             )
             for record in records
         ]
+
+
+class BackendAccountRepository:
+    @staticmethod
+    def get() -> BackendAccount | None:
+        try:
+            record = (
+                BackendAccountModel
+                .select()
+                .order_by(BackendAccountModel.id.desc())
+                .get()
+            )
+            return BackendAccount(record.base_url, record.email, record.password)
+        except peewee.DoesNotExist:
+            return None
+
+    @staticmethod
+    def save(base_url: str, email: str, password: str) -> None:
+        # Cuenta única: reemplaza cualquier registro previo.
+        BackendAccountModel.delete().execute()
+        BackendAccountModel.create(
+            base_url=base_url,
+            email=email,
+            password=password,
+            updated_at=datetime.now(timezone.utc),
+        )

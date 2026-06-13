@@ -14,11 +14,15 @@ class SyncWorker:
     """
 
     def __init__(self, config: BackendConfig | None = None):
+        self._explicit_config = config
         self.config = config or BackendConfig.from_env()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
 
     def start(self) -> None:
+        # Re-resolve on every start so credentials onboarded after boot
+        # (via the edge login page) are picked up.
+        self.config = self._explicit_config or BackendConfig.resolve()
         if not self.config.sync_enabled:
             logger.info(
                 "Backend sync disabled (no BACKEND_SERVICE_EMAIL/PASSWORD); "
@@ -66,3 +70,7 @@ class SyncWorker:
                 logger.info("Pulled thresholds for %s device(s)", updated)
         except Exception as error:  # noqa: BLE001 - worker must never die
             logger.warning("Threshold pull cycle failed: %s", error)
+
+
+# Shared singleton so app.py and the onboarding endpoint drive the same worker.
+worker = SyncWorker()

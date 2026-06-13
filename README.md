@@ -237,3 +237,19 @@ Flujo:
 Si no se definen `BACKEND_SERVICE_EMAIL` y `BACKEND_SERVICE_PASSWORD`, la
 sincronizacion queda **deshabilitada** y el edge corre de forma 100% standalone
 (comportamiento original).
+
+### Vinculacion de cuenta (onboarding)
+
+En lugar de configurar las env vars `BACKEND_SERVICE_*` a mano, el usuario puede
+vincular el edge a su cuenta CafeLab desde una pantalla del propio edge:
+
+- `GET /onboarding` — formulario web de login.
+- `POST /api/v1/edge/account` — body `{email, password, backendUrl?}`. El edge
+  valida las credenciales con un sign-in contra el backend; si son correctas las
+  guarda y arranca la sincronizacion.
+- `GET /api/v1/edge/account` — indica si ya hay cuenta vinculada (no expone la
+  contraseña).
+
+Las credenciales guardadas **tienen prioridad** sobre las env vars
+(`BackendConfig.resolve()`). Nota: por el diseño del backend (JWT de 7 dias sin
+refresh) el edge guarda la contraseña localmente; en produccion deberia cifrarse.

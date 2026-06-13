@@ -39,9 +39,21 @@ reinicia.
    sudo chmod +x /usr/local/sbin/wifi-connect
    ```
 
-   > El binario incluye los archivos del portal (UI). Si tu release los trae
-   > aparte (`ui/`), cópialos a `/usr/local/share/wifi-connect/ui` y pasa
-   > `--ui-directory` en el script.
+   > ⚠️ **Importante:** el tarball del binario **NO incluye la web del portal**.
+   > La UI viene en un asset aparte, `wifi-connect-ui.tar.gz`. Si solo instalas
+   > el binario, el portal responde **404**. Instala también la UI (usa la misma
+   > versión que el binario, p. ej. `v4.11.84`):
+   >
+   > ```bash
+   > curl -sL -o wifi-connect-ui.tar.gz \
+   >   https://github.com/balena-os/wifi-connect/releases/download/v4.11.84/wifi-connect-ui.tar.gz
+   > sudo mkdir -p /usr/local/share/wifi-connect/ui
+   > sudo tar xzf wifi-connect-ui.tar.gz -C /usr/local/share/wifi-connect/ui
+   > ls /usr/local/share/wifi-connect/ui/index.html   # verificar
+   > ```
+   >
+   > El launcher pasa `--ui-directory /usr/local/share/wifi-connect/ui`
+   > automáticamente (configurable con `CAFELAB_UI_DIR`).
 
 2. **Instalar el launcher y el servicio** (desde esta carpeta, copiada a la Pi):
 

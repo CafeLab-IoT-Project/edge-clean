@@ -2,15 +2,16 @@ from flask import Flask, jsonify
 
 from iam.application.services import IamApplicationService
 from iam.interfaces.services import iam_api
+from iotmonitoring.interfaces.account_services import onboarding_api
 from iotmonitoring.interfaces.services import iotmonitoring_api
 from shared.infrastructure.database import init_db
-from shared.infrastructure.sync_worker import SyncWorker
+from shared.infrastructure.sync_worker import worker as sync_worker
 
 app = Flask(__name__)
 app.register_blueprint(iam_api)
 app.register_blueprint(iotmonitoring_api)
+app.register_blueprint(onboarding_api)
 
-sync_worker = SyncWorker()
 first_request = True
 
 

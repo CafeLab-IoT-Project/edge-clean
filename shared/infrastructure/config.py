@@ -41,3 +41,31 @@ class BackendConfig:
             sync_enabled=_as_bool(os.environ.get("BACKEND_SYNC_ENABLED"), default=True),
             sync_interval_seconds=int(os.environ.get("BACKEND_SYNC_INTERVAL_SECONDS", "30")),
         )
+
+    @classmethod
+    def resolve(cls) -> "BackendConfig":
+        """Prefer the account onboarded via the edge UI; fall back to env vars.
+
+        Lets a user link the edge to their CafeLab account from the onboarding
+        page instead of setting BACKEND_SERVICE_* by hand.
+        """
+        account = None
+        try:
+            from iotmonitoring.infrastructure.repositories import BackendAccountRepository
+
+            account = BackendAccountRepository.get()
+        except Exception:
+            # DB not ready yet (e.g. before init_db) -> just use env.
+            account = None
+
+        if account is None:
+            return cls.from_env()
+
+        return cls(
+            base_url=account.base_url,
+            service_email=account.email,
+            service_password=account.password,
+            timeout_seconds=float(os.environ.get("BACKEND_TIMEOUT_SECONDS", "5")),
+            sync_enabled=_as_bool(os.environ.get("BACKEND_SYNC_ENABLED"), default=True),
+            sync_interval_seconds=int(os.environ.get("BACKEND_SYNC_INTERVAL_SECONDS", "30")),
+        )
