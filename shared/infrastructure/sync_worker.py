@@ -1,5 +1,6 @@
 import logging
 import threading
+import time
 
 from shared.infrastructure.config import BackendConfig
 
@@ -65,21 +66,37 @@ class SyncWorker:
         from iotmonitoring.application.sync_services import TelemetrySyncService
 
         service = TelemetrySyncService()
+        interval = self.config.sync_interval_seconds
         # Full reconcile once on startup (drain backlog + refresh thresholds).
         self._push(service)
         self._pull(service)
+        interval = self._effective_interval(service, interval)
+        last_pull = time.monotonic()
 
         while not self._stop.is_set():
-            woke_by_reading = self._wake.wait(self.config.sync_interval_seconds)
+            self._wake.wait(interval)
             self._wake.clear()
             if self._stop.is_set():
                 break
 
+            # A reading kick pushes immediately (low latency to the backend).
             self._push(service)
-            # Refresh thresholds only on the periodic heartbeat, not on every
-            # reading kick (otherwise each reading would trigger an HTTP sweep).
-            if not woke_by_reading:
+            # Thresholds refresh on a wall-clock cadence, independent of why we
+            # woke -- otherwise a steady reading stream keeps waking us before
+            # the timeout and thresholds would never get re-pulled.
+            now = time.monotonic()
+            if now - last_pull >= interval:
                 self._pull(service)
+                interval = self._effective_interval(service, interval)
+                last_pull = now
+
+    def _effective_interval(self, service, current: int) -> int:
+        """Adopt the cadence advertised by the backend (UI-configurable)."""
+        advertised = getattr(service, "last_interval_seconds", None)
+        if advertised and advertised != current:
+            logger.info("Sync interval updated from backend: %ss -> %ss", current, advertised)
+            return advertised
+        return current
 
     @staticmethod
     def _push(service) -> None:

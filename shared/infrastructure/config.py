@@ -21,7 +21,7 @@ class BackendConfig:
         service_password: str | None,
         timeout_seconds: float = 10.0,
         sync_enabled: bool = True,
-        sync_interval_seconds: int = 30,
+        sync_interval_seconds: int = 10,
     ):
         self.base_url = base_url
         self.service_email = service_email
@@ -39,7 +39,7 @@ class BackendConfig:
             service_password=os.environ.get("BACKEND_SERVICE_PASSWORD"),
             timeout_seconds=float(os.environ.get("BACKEND_TIMEOUT_SECONDS", "10")),
             sync_enabled=_as_bool(os.environ.get("BACKEND_SYNC_ENABLED"), default=True),
-            sync_interval_seconds=int(os.environ.get("BACKEND_SYNC_INTERVAL_SECONDS", "30")),
+            sync_interval_seconds=int(os.environ.get("BACKEND_SYNC_INTERVAL_SECONDS", "10")),
         )
 
     @classmethod
@@ -67,5 +67,5 @@ class BackendConfig:
             service_password=account.password,
             timeout_seconds=float(os.environ.get("BACKEND_TIMEOUT_SECONDS", "10")),
             sync_enabled=_as_bool(os.environ.get("BACKEND_SYNC_ENABLED"), default=True),
-            sync_interval_seconds=int(os.environ.get("BACKEND_SYNC_INTERVAL_SECONDS", "30")),
+            sync_interval_seconds=int(os.environ.get("BACKEND_SYNC_INTERVAL_SECONDS", "10")),
         )

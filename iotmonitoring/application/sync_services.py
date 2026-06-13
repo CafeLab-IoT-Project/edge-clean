@@ -23,12 +23,18 @@ class TelemetrySyncService:
     the local SQLite outbox with the backend whenever connectivity is available.
     """
 
+    # Floor to avoid hammering the backend if a tiny value is configured.
+    MIN_INTERVAL_SECONDS = 5
+
     def __init__(self, backend_client: BackendClient | None = None):
         self.backend_client = backend_client or BackendClient()
         self.device_repository = DeviceRepository()
         self.reading_repository = SensorReadingRepository()
         self.thresholds_repository = StorageThresholdsRepository()
         self.threshold_service = StorageThresholdService()
+        # Latest sync cadence advertised by the backend (via the thresholds
+        # payload). None until a pull sees a value. The worker reads this.
+        self.last_interval_seconds: int | None = None
 
     def _coffee_lot_id_for(self, device_id: str) -> int | None:
         device = self.device_repository.find_by_id(device_id)
@@ -90,6 +96,17 @@ class TelemetrySyncService:
         payload = self.backend_client.get_thresholds(coffee_lot_id)
         if not payload:
             return None
+
+        # The backend may advertise how often the edge should re-pull. Capture
+        # it so the worker can adapt its cadence (configurable from the UI).
+        raw_interval = payload.get("syncIntervalSeconds")
+        if raw_interval is not None:
+            try:
+                self.last_interval_seconds = max(
+                    self.MIN_INTERVAL_SECONDS, int(raw_interval)
+                )
+            except (TypeError, ValueError):
+                logger.warning("Ignoring non-numeric syncIntervalSeconds: %r", raw_interval)
 
         try:
             thresholds = self.threshold_service.synchronize(
