@@ -39,7 +39,7 @@ class IoTMonitoringApplicationService:
         humidity,
         recorded_at=None,
         api_key: str | None = None,
-    ) -> tuple[SensorReading, str, str, ActuatorEvent | None]:
+    ) -> tuple[SensorReading, str, str, bool, bool, ActuatorEvent | None]:
         if api_key is not None and not self.device_repository.find_by_id_and_api_key(device_id, api_key):
             raise ValueError("Device not found")
 
@@ -53,6 +53,9 @@ class IoTMonitoringApplicationService:
         thresholds = self.get_current_thresholds(device_id)
         status = self.condition_service.evaluate(saved_reading, thresholds)
         actuator_command = self.condition_service.actuator_command(saved_reading, thresholds)
+        humidity_alert, temperature_alert = self.condition_service.environmental_alerts(
+            saved_reading, thresholds
+        )
         actuator_event = None
 
         if actuator_command == ACTUATOR_ACTIVATE:
@@ -60,7 +63,7 @@ class IoTMonitoringApplicationService:
                 self.actuator_event_service.activate(device_id, saved_reading.recorded_at)
             )
 
-        return saved_reading, status, actuator_command, actuator_event
+        return saved_reading, status, actuator_command, humidity_alert, temperature_alert, actuator_event
 
     def get_current_thresholds(self, device_id: str) -> StorageThresholds:
         thresholds = self.thresholds_repository.find_current_by_device_id(device_id)
@@ -97,28 +100,42 @@ class IoTMonitoringApplicationService:
         )
         return self.thresholds_repository.save_current(thresholds)
 
-    def get_latest_reading(self, device_id: str) -> tuple[SensorReading, str, str] | None:
+    def get_latest_reading(
+        self, device_id: str
+    ) -> tuple[SensorReading, str, str, bool, bool] | None:
         reading = self.reading_repository.find_latest_by_device_id(device_id)
         if reading is None:
             return None
 
         thresholds = self.get_current_thresholds(device_id)
+        humidity_alert, temperature_alert = self.condition_service.environmental_alerts(reading, thresholds)
         return (
             reading,
             self.condition_service.evaluate(reading, thresholds),
             self.condition_service.actuator_command(reading, thresholds),
+            humidity_alert,
+            temperature_alert,
         )
 
-    def get_recent_readings(self, device_id: str, limit: int = 10) -> list[tuple[SensorReading, str, str]]:
+    def get_recent_readings(
+        self, device_id: str, limit: int = 10
+    ) -> list[tuple[SensorReading, str, str, bool, bool]]:
         thresholds = self.get_current_thresholds(device_id)
-        return [
-            (
-                reading,
-                self.condition_service.evaluate(reading, thresholds),
-                self.condition_service.actuator_command(reading, thresholds),
+        results = []
+        for reading in self.reading_repository.find_recent_by_device_id(device_id, limit):
+            humidity_alert, temperature_alert = self.condition_service.environmental_alerts(
+                reading, thresholds
             )
-            for reading in self.reading_repository.find_recent_by_device_id(device_id, limit)
-        ]
+            results.append(
+                (
+                    reading,
+                    self.condition_service.evaluate(reading, thresholds),
+                    self.condition_service.actuator_command(reading, thresholds),
+                    humidity_alert,
+                    temperature_alert,
+                )
+            )
+        return results
 
     def get_sensor_status(self, device_id: str) -> dict:
         reading = self.reading_repository.find_latest_by_device_id(device_id)

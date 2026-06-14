@@ -16,8 +16,9 @@
  *   3. Announce (phone-home): POST /api/v1/iam/devices/announce {deviceId:MAC}
  *      -> el edge devuelve la api_key, que se guarda en NVS (Preferences).
  *   4. Loop: lee el DHT22 y hace POST /api/v1/edge/readings con la api_key.
- *      Aplica el actuatorCommand de la respuesta. Si recibe 401 (p.ej. el edge
- *      fue reseteado), borra la key y se vuelve a anunciar.
+ *      La respuesta trae humidityAlert y temperatureAlert; enciende el pin de
+ *      humedad (18) y el de temperatura (19) de forma independiente. Si recibe
+ *      401 (p.ej. el edge fue reseteado), borra la key y se vuelve a anunciar.
  *
  * Librerias (Library Manager):
  *   - WiFiManager        (tzapu)
@@ -50,7 +51,10 @@ static const uint16_t EDGE_PORT     = 5000;
 
 static const uint8_t DHT_PIN      = 4;               // dato del DHT22
 static const uint8_t DHT_KIND     = DHT22;
-static const uint8_t ACTUATOR_PIN = 2;               // LED on-board = deshumedecedor simulado
+// Dos actuadores independientes: el edge responde humidityAlert y temperatureAlert
+// (cada uno true cuando la variable esta fuera de rango: > max o < min).
+static const uint8_t HUMIDITY_ACTUATOR_PIN    = 18;  // p.ej. deshumidificador
+static const uint8_t TEMPERATURE_ACTUATOR_PIN = 19;  // p.ej. enfriador/calefactor
 
 static const unsigned long READ_INTERVAL_MS = 30000; // 30 s (< 2 min => sensor ONLINE)
 // =====================================================================================
@@ -152,8 +156,9 @@ bool announce() {
   return ok;
 }
 
-void applyActuator(const String& command) {
-  digitalWrite(ACTUATOR_PIN, command == "ACTIVATE" ? HIGH : LOW);
+void applyActuators(bool humidityAlert, bool temperatureAlert) {
+  digitalWrite(HUMIDITY_ACTUATOR_PIN, humidityAlert ? HIGH : LOW);
+  digitalWrite(TEMPERATURE_ACTUATOR_PIN, temperatureAlert ? HIGH : LOW);
 }
 
 void sendReading(float temperature, float humidity) {
@@ -191,9 +196,12 @@ void sendReading(float temperature, float humidity) {
     if (status == 200 || status == 201) {
       JsonDocument resp;
       if (deserializeJson(resp, response) == DeserializationError::Ok) {
-        String command = resp["actuatorCommand"] | "NONE";
-        applyActuator(command);
-        Serial.printf("[actuador] %s\n", command.c_str());
+        bool humidityAlert = resp["humidityAlert"] | false;
+        bool temperatureAlert = resp["temperatureAlert"] | false;
+        applyActuators(humidityAlert, temperatureAlert);
+        Serial.printf("[actuador] humedad=%s temperatura=%s\n",
+                      humidityAlert ? "ON" : "OFF",
+                      temperatureAlert ? "ON" : "OFF");
       }
     } else if (status == 401) {
       // El edge no reconoce la key (p.ej. fue reseteado): re-anunciarse.
@@ -211,8 +219,10 @@ void sendReading(float temperature, float humidity) {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(ACTUATOR_PIN, OUTPUT);
-  digitalWrite(ACTUATOR_PIN, LOW);
+  pinMode(HUMIDITY_ACTUATOR_PIN, OUTPUT);
+  pinMode(TEMPERATURE_ACTUATOR_PIN, OUTPUT);
+  digitalWrite(HUMIDITY_ACTUATOR_PIN, LOW);
+  digitalWrite(TEMPERATURE_ACTUATOR_PIN, LOW);
   dht.begin();
 
   // WiFiManager: conecta con WiFi guardado, o abre el portal "TrackSilo-Setup".

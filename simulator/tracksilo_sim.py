@@ -4,7 +4,8 @@
 Imita el firmware real (firmware/tracksilo-esp32/tracksilo-esp32.ino):
   1. se ANUNCIA al edge (phone-home) con su device_id y recibe su api_key.
   2. en loop: genera T/H, hace POST /api/v1/edge/readings con la X-API-Key,
-     imprime status + actuatorCommand y "aplica" el actuador.
+     imprime status + humidityAlert/temperatureAlert y "aplica" los dos
+     actuadores (pin 18 humedad, pin 19 temperatura).
 
 El lote NO se configura aquí: se asigna desde la web /onboarding del edge.
 Mientras no tenga lote, el edge bufferea las lecturas sin sincronizar.
@@ -79,9 +80,17 @@ def send_reading(edge: str, device_id: str, api_key: str, temp: float, hum: floa
     if resp.status_code in (200, 201):
         body = resp.json()
         command = body.get("actuatorCommand", "NONE")
-        print(f"{resp.status_code} status={body.get('status')} actuador={command}")
-        if command == "ACTIVATE":
-            print("       [actuador] deshumedecedor ON")
+        humidity_alert = body.get("humidityAlert", False)
+        temperature_alert = body.get("temperatureAlert", False)
+        print(
+            f"{resp.status_code} status={body.get('status')} actuador={command} "
+            f"humedad={'ON' if humidity_alert else 'OFF'} "
+            f"temperatura={'ON' if temperature_alert else 'OFF'}"
+        )
+        if humidity_alert:
+            print("       [pin18] actuador de humedad ON")
+        if temperature_alert:
+            print("       [pin19] actuador de temperatura ON")
     elif resp.status_code == 401:
         print("401: revisa device_id / api_key", file=sys.stderr)
     else:

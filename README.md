@@ -159,6 +159,8 @@ Respuesta esperada con humedad elevada:
   "humidity": 70.2,
   "status": "DANGER",
   "actuatorCommand": "ACTIVATE",
+  "humidityAlert": true,
+  "temperatureAlert": true,
   "recordedAt": "2026-05-31T07:00:00Z"
 }
 ```
@@ -201,6 +203,21 @@ Invoke-RestMethod `
   `WARNING`.
 - Si todo esta dentro del rango, el estado es `OPTIMAL`.
 - Si el sensor no envia lecturas por mas de 2 minutos, se considera `OFFLINE`.
+
+### Alertas por variable (actuadores independientes)
+
+Ademas del `actuatorCommand` (que solo controla el actuador de humedad, por
+compatibilidad), la respuesta de `POST /api/v1/edge/readings` incluye dos
+banderas independientes que el firmware usa para encender un actuador por
+variable:
+
+- `humidityAlert`: `true` cuando la humedad esta **fuera de rango**
+  (`> maxHumidity` o `< minHumidity`). El firmware enciende el **pin 18**.
+- `temperatureAlert`: `true` cuando la temperatura esta **fuera de rango**
+  (`> maxTemperature` o `< minTemperature`). El firmware enciende el **pin 19**.
+
+Estas banderas tambien aparecen en `GET /readings/latest` y `GET /readings`. El
+control es en vivo (no se persiste un historial separado por tipo de actuador).
 
 ## Sincronizacion con el backend (edge -> backend)
 

@@ -57,7 +57,13 @@ def _thresholds_resource(thresholds) -> dict:
     }
 
 
-def _reading_resource(reading, status: str, actuator_command: str) -> dict:
+def _reading_resource(
+    reading,
+    status: str,
+    actuator_command: str,
+    humidity_alert: bool,
+    temperature_alert: bool,
+) -> dict:
     return {
         "readingId": reading.id,
         "deviceId": reading.device_id,
@@ -65,6 +71,8 @@ def _reading_resource(reading, status: str, actuator_command: str) -> dict:
         "humidity": reading.humidity,
         "status": status,
         "actuatorCommand": actuator_command,
+        "humidityAlert": humidity_alert,
+        "temperatureAlert": temperature_alert,
         "recordedAt": _format_datetime(reading.recorded_at),
     }
 
@@ -122,7 +130,14 @@ def register_reading():
     device_id = _get_device_id(data)
 
     try:
-        reading, status, actuator_command, _ = iot_monitoring_service.register_reading(
+        (
+            reading,
+            status,
+            actuator_command,
+            humidity_alert,
+            temperature_alert,
+            _,
+        ) = iot_monitoring_service.register_reading(
             device_id,
             data["temperature"],
             data["humidity"],
@@ -131,7 +146,9 @@ def register_reading():
         )
         # Wake the sync worker so this reading is pushed now, not on the next poll.
         sync_worker.notify()
-        return jsonify(_reading_resource(reading, status, actuator_command)), 201
+        return jsonify(
+            _reading_resource(reading, status, actuator_command, humidity_alert, temperature_alert)
+        ), 201
     except KeyError:
         return jsonify({"error": "Missing required reading fields"}), 400
     except ValueError as error:
@@ -146,8 +163,10 @@ def get_latest_reading():
     if result is None:
         return jsonify({"error": "No readings found for device"}), 404
 
-    reading, status, actuator_command = result
-    return jsonify(_reading_resource(reading, status, actuator_command)), 200
+    reading, status, actuator_command, humidity_alert, temperature_alert = result
+    return jsonify(
+        _reading_resource(reading, status, actuator_command, humidity_alert, temperature_alert)
+    ), 200
 
 
 @iotmonitoring_api.route("/api/v1/edge/readings", methods=["GET"])
@@ -159,8 +178,9 @@ def get_readings():
         return jsonify({"error": str(error)}), 400
 
     readings = [
-        _reading_resource(reading, status, actuator_command)
-        for reading, status, actuator_command in iot_monitoring_service.get_recent_readings(device_id, limit)
+        _reading_resource(reading, status, actuator_command, humidity_alert, temperature_alert)
+        for reading, status, actuator_command, humidity_alert, temperature_alert
+        in iot_monitoring_service.get_recent_readings(device_id, limit)
     ]
     return jsonify({"readings": readings}), 200
 

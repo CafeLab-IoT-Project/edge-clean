@@ -177,6 +177,7 @@ ONBOARDING_HTML = """<!doctype html>
   <h1>Configuración del edge</h1>
 
   <h2>1. Vincular a tu cuenta</h2>
+  <p id="acct" class="msg muted">Verificando cuenta…</p>
   <form id="f">
     <label>Email</label>
     <input id="email" type="email" required>
@@ -218,10 +219,28 @@ ONBOARDING_HTML = """<!doctype html>
           body: JSON.stringify(body),
         });
         const data = await r.json();
-        if (r.ok) { msg.textContent = 'Cuenta vinculada: ' + data.email; msg.className = 'msg ok'; loadDevices(); }
+        if (r.ok) { msg.textContent = 'Cuenta vinculada: ' + data.email; msg.className = 'msg ok'; loadAccount(); loadDevices(); }
         else { msg.textContent = 'Error: ' + (data.error || r.status); msg.className = 'msg err'; }
       } catch (err) { msg.textContent = 'Error de red: ' + err; msg.className = 'msg err'; }
     });
+
+    async function loadAccount() {
+      try {
+        const r = await fetch('/api/v1/edge/account');
+        const data = await r.json();
+        const acct = $('acct');
+        if (r.ok && data.configured) {
+          acct.textContent = 'Cuenta vinculada: ' + data.email +
+            (data.backendUrl ? ' (' + data.backendUrl + ')' : '');
+          acct.className = 'msg ok';
+          if (data.email) $('email').value = data.email;
+          if (data.backendUrl) $('backendUrl').value = data.backendUrl;
+        } else {
+          acct.textContent = 'No hay ninguna cuenta vinculada todavía.';
+          acct.className = 'msg muted';
+        }
+      } catch (e) { $('acct').textContent = ''; }
+    }
 
     function lotOptions(selected) {
       const opts = ['<option value="">— sin asignar —</option>'];
@@ -290,6 +309,7 @@ ONBOARDING_HTML = """<!doctype html>
     });
 
     $('refresh').addEventListener('click', loadDevices);
+    loadAccount();
     loadDevices();
   </script>
 </body>

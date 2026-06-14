@@ -157,6 +157,27 @@ class StorageConditionService:
             return ACTUATOR_ACTIVATE
         return ACTUATOR_NONE
 
+    @staticmethod
+    def environmental_alerts(
+        reading: SensorReading, thresholds: StorageThresholds
+    ) -> tuple[bool, bool]:
+        """Devuelve (humidity_alert, temperature_alert).
+
+        Cada bandera se activa cuando la variable esta fuera de rango, es decir
+        por encima del maximo o por debajo del minimo. El firmware usa estas
+        banderas para encender un actuador por variable (pin de humedad / pin de
+        temperatura) de forma independiente.
+        """
+        humidity_alert = (
+            reading.humidity > thresholds.max_humidity
+            or reading.humidity < thresholds.min_humidity
+        )
+        temperature_alert = (
+            reading.temperature > thresholds.max_temperature
+            or reading.temperature < thresholds.min_temperature
+        )
+        return humidity_alert, temperature_alert
+
 
 class ActuatorEventService:
     @staticmethod
