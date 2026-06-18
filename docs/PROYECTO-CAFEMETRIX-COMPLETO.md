@@ -25,7 +25,7 @@ pérdida de aroma) si la temperatura/humedad se salen de rango. CafeLab da
 **vigilancia continua + reacción automática + trazabilidad** por lote.
 
 **Lo distintivo (arquitectura edge-first):**
-- El control crítico (encender el actuador) ocurre **en local**, en milisegundos,
+- El control crítico (encender los actuadores) ocurre **en local**, en milisegundos,
   **sin depender de internet**.
 - La nube es para **histórico, analítica y configuración**, no para el control en
   tiempo real → resiliencia ante caídas de red.
@@ -62,7 +62,7 @@ pérdida de aroma) si la temperatura/humedad se salen de rango. CafeLab da
 | **Frontend** | `cafeLab-frontend` | Angular 20, RxJS, ngx-translate | Firebase Hosting |
 
 **Principio rector — dos caminos desacoplados:**
-1. **device → edge** (lecturas + comando de actuador): **siempre local, instantáneo**, funciona sin internet.
+1. **device → edge** (lecturas + alertas de actuador humedad/temperatura): **siempre local, instantáneo**, funciona sin internet.
 2. **edge → backend** (telemetría histórica + umbrales): **eventual**, en segundo plano vía *Sync Worker*. **El ESP32 nunca habla con el backend.**
 
 ---
@@ -96,16 +96,19 @@ identidad y la asignación de lote se resuelven **en runtime**.
 
 ### 3.1. Simulador (para demos sin hardware)
 `simulator/tracksilo_sim.py` — réplica en Python del firmware. Se anuncia igual,
-manda lecturas y aplica el actuador "en pantalla". Útil para presentar el flujo
-sin un ESP32 físico.
+manda lecturas e imprime `humidityAlert`/`temperatureAlert`, "aplicando" en
+pantalla los dos actuadores (pin 18 humedad / pin 19 temperatura). Útil para
+presentar el flujo sin un ESP32 físico.
 
 ```bash
 # se anuncia y manda lecturas cada 5s
 python tracksilo_sim.py --edge http://raspberrypi.local:5000
 # simula otro dispositivo distinto
 python tracksilo_sim.py --device-id esp32-sim-02
-# escenario "humedad alta" (dispara el actuador), 3 lecturas
+# escenario "humedad alta" (dispara el actuador de humedad), 3 lecturas
 python tracksilo_sim.py --profile humid --count 3
+# valores aleatorios: ejercita ambos umbrales (temp y humedad), 12 lecturas
+python tracksilo_sim.py --profile random --count 12 --interval 1
 ```
 Perfiles: `optimal`, `hot`, `humid`, `random`.
 
@@ -116,7 +119,7 @@ Perfiles: `optimal`, `hot`, `humid`, `random`.
 **Stack:** Python · Flask · Peewee (ORM) · SQLite (`edge_clean.db`, modo WAL) · requests · python-dateutil.
 
 **Responsabilidades:**
-1. Recibir lecturas del ESP32 y responder **al instante** con estado + comando de actuador.
+1. Recibir lecturas del ESP32 y responder **al instante** con estado + alertas de actuador (humedad y temperatura).
 2. Almacenar todo localmente (resiliencia offline).
 3. Gestionar la identidad de los dispositivos (auto-enroll, api_keys).
 4. Sincronizar en segundo plano con el backend (subir telemetría, bajar umbrales).
