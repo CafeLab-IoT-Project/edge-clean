@@ -17,10 +17,12 @@ MAX_PHYSICAL_TEMPERATURE = 80.0
 MIN_PHYSICAL_HUMIDITY = 0.0
 MAX_PHYSICAL_HUMIDITY = 100.0
 
-MIN_ALLOWED_THRESHOLD_TEMPERATURE = 10.0
-MAX_ALLOWED_THRESHOLD_TEMPERATURE = 30.0
-MIN_ALLOWED_THRESHOLD_HUMIDITY = 40.0
-MAX_ALLOWED_THRESHOLD_HUMIDITY = 80.0
+# Aceptamos cualquier umbral dentro del rango físico del sensor (igual que el
+# backend), para no rechazar configuraciones válidas como 0/99.
+MIN_ALLOWED_THRESHOLD_TEMPERATURE = MIN_PHYSICAL_TEMPERATURE
+MAX_ALLOWED_THRESHOLD_TEMPERATURE = MAX_PHYSICAL_TEMPERATURE
+MIN_ALLOWED_THRESHOLD_HUMIDITY = MIN_PHYSICAL_HUMIDITY
+MAX_ALLOWED_THRESHOLD_HUMIDITY = MAX_PHYSICAL_HUMIDITY
 
 
 def _require_device_id(device_id: str) -> None:
@@ -98,14 +100,20 @@ class StorageThresholdService:
             <= max_temperature
             <= MAX_ALLOWED_THRESHOLD_TEMPERATURE
         ):
-            raise ValueError("temperature thresholds must be between 10 and 30 Celsius")
+            raise ValueError(
+                f"temperature thresholds must be between {MIN_ALLOWED_THRESHOLD_TEMPERATURE} "
+                f"and {MAX_ALLOWED_THRESHOLD_TEMPERATURE} Celsius"
+            )
         if not (
             MIN_ALLOWED_THRESHOLD_HUMIDITY
             <= min_humidity
             <= max_humidity
             <= MAX_ALLOWED_THRESHOLD_HUMIDITY
         ):
-            raise ValueError("humidity thresholds must be between 40 and 80 percent")
+            raise ValueError(
+                f"humidity thresholds must be between {MIN_ALLOWED_THRESHOLD_HUMIDITY} "
+                f"and {MAX_ALLOWED_THRESHOLD_HUMIDITY} percent"
+            )
 
         return StorageThresholds(
             device_id,
