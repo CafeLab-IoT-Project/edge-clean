@@ -12,7 +12,7 @@ lecturas (device → edge, local e instantáneo) y la sincronización en segundo
 |---|---|---|
 | **Operador** | Provisiona el hardware, vincula la cuenta y asigna lotes | — |
 | **Usuario CafeLab** | Dueño del lote; configura umbrales/cadencia desde la web | — |
-| **ESP32** | Firmware TrackSilo (DHT22 + actuador); `device_id` = su MAC | `edge-clean/firmware/tracksilo-esp32` |
+| **ESP32** | Firmware TrackSilo (DHT22 + 2 actuadores: pin 18 humedad / pin 19 temperatura); `device_id` = su MAC | `edge-clean/firmware/tracksilo-esp32` |
 | **Edge** | Servicio Flask en la Raspberry Pi (SQLite local) | `edge-clean` |
 | **Sync Worker** | Hilo daemon en el Edge; push event-driven + pull en cadencia configurable | `edge-clean/shared/infrastructure/sync_worker.py` |
 | **Backend** | API Spring Boot CafeLab (JWT) | `cafeLab-backEnd` |
@@ -121,11 +121,12 @@ sequenceDiagram
         ESP->>ESP: Lee DHT22 (temperature, humidity)
         ESP->>Edge: POST /api/v1/edge/readings\nX-API-Key: <api_key auto>\n{deviceId, temperature, humidity}
         Edge->>Edge: Autentica (deviceId + X-API-Key)
-        Edge->>Edge: Guarda reading (unsynced) + evalúa vs umbrales locales
+        Edge->>Edge: Guarda reading (unsynced) + evalúa estado y alertas vs umbrales locales
         Edge->>Worker: notify() (despierta el push inmediato)
-        Edge-->>ESP: 201 {status, actuatorCommand:"ACTIVATE"|"NONE"}
-        ESP->>ESP: applyActuator(actuatorCommand)
+        Edge-->>ESP: 201 {status, actuatorCommand, humidityAlert, temperatureAlert}
+        ESP->>ESP: applyActuators(humidityAlert→pin 18, temperatureAlert→pin 19)
     end
+    note over ESP,Edge: Reglas: humidityAlert / temperatureAlert = variable FUERA de rango\n(> max O < min); cada una controla su pin de forma independiente.\nactuatorCommand es legacy (solo ACTIVATE si humedad > max).
     note over ESP,Edge: Si el device aún NO tiene lote: el edge igual responde\n(usa umbrales por defecto) y bufferea sin sincronizar.
     end
 
@@ -168,7 +169,7 @@ sequenceDiagram
     rect rgb(255, 240, 245)
     note over ESP,Edge: FASE 7 — La siguiente lectura ya evalúa con los umbrales sincronizados
     ESP->>Edge: POST /api/v1/edge/readings (siguiente ciclo)
-    Edge-->>ESP: 201 {actuatorCommand actualizado}
+    Edge-->>ESP: 201 {alertas recalculadas con los nuevos umbrales}
     end
 ```
 
@@ -186,7 +187,7 @@ sequenceDiagram
 | GET | `/api/v1/edge/lots` | — | Operador/web | lotes del backend (para asignar) |
 | POST | `/api/v1/edge/devices/{id}/assign` | — | Operador/web | `{lotId}` → fija `device.lot_id` |
 | POST | `/api/v1/edge/devices/reset` | — | Operador/web | borra IoT + lecturas (mantiene cuenta) |
-| POST | `/api/v1/edge/readings` | X-API-Key (auto) | ESP32 | `{deviceId, temperature, humidity}` → `201 {status, actuatorCommand}` |
+| POST | `/api/v1/edge/readings` | X-API-Key (auto) | ESP32 | `{deviceId, temperature, humidity}` → `201 {status, actuatorCommand, humidityAlert, temperatureAlert}` |
 | GET | `/api/v1/edge/thresholds` | — | dashboard | umbrales actuales locales |
 | GET | `/api/v1/edge/sync/status` | — | diagnóstico | pendientes, cadencia, worker |
 | POST | `/api/v1/edge/sync` | X-API-Key | trigger manual | fuerza push+pull |
@@ -213,6 +214,11 @@ sequenceDiagram
 - **Dos caminos desacoplados**: *device → edge* (lecturas) siempre local e
   instantáneo; *edge → backend* eventual vía Sync Worker. El ESP32 nunca habla
   con el backend.
+- **Dos actuadores independientes**: en cada lectura el edge calcula
+  `humidityAlert` y `temperatureAlert` (cada bandera = su variable fuera de rango,
+  `> max` o `< min`) y el firmware enciende el pin 18 (humedad) y el pin 19
+  (temperatura) por separado. `actuatorCommand` se conserva como legacy
+  (`ACTIVATE` solo si la humedad supera el máximo).
 - **Push event-driven**: cada lectura despierta al Worker (`notify()`), así la
   telemetría sube casi al instante en vez de esperar el poll.
 - **Cadencia configurable**: el backend puede mandar `syncIntervalSeconds` en el

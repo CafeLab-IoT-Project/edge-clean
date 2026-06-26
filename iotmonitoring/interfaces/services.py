@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, request
 
 from iam.interfaces.services import authenticate_request
 from iotmonitoring.application.services import IoTMonitoringApplicationService
+from shared.infrastructure.events import READING, THRESHOLDS, bus
 from shared.infrastructure.sync_worker import worker as sync_worker
 
 iotmonitoring_api = Blueprint("iotmonitoring_api", __name__)
@@ -112,6 +113,7 @@ def update_thresholds():
             data["maxHumidity"],
             request.headers.get("X-API-Key"),
         )
+        bus.publish(THRESHOLDS)
         return jsonify(_thresholds_resource(thresholds)), 200
     except KeyError:
         return jsonify({"error": "Missing required threshold fields"}), 400
@@ -146,6 +148,8 @@ def register_reading():
         )
         # Wake the sync worker so this reading is pushed now, not on the next poll.
         sync_worker.notify()
+        # Empuja la lectura al dashboard en vivo (SSE).
+        bus.publish(READING)
         return jsonify(
             _reading_resource(reading, status, actuator_command, humidity_alert, temperature_alert)
         ), 201

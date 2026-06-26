@@ -6,6 +6,7 @@ from flask import Flask, jsonify
 from iam.application.services import IamApplicationService
 from iam.interfaces.services import iam_api
 from iotmonitoring.interfaces.account_services import onboarding_api
+from iotmonitoring.interfaces.dashboard_services import dashboard_api
 from iotmonitoring.interfaces.services import iotmonitoring_api
 from shared.infrastructure.database import init_db
 from shared.infrastructure.sync_worker import worker as sync_worker
@@ -21,6 +22,7 @@ app = Flask(__name__)
 app.register_blueprint(iam_api)
 app.register_blueprint(iotmonitoring_api)
 app.register_blueprint(onboarding_api)
+app.register_blueprint(dashboard_api)
 
 first_request = True
 
@@ -47,4 +49,6 @@ if __name__ == "__main__":
     port = int(os.environ.get("EDGE_PORT", "5000"))
     # Disable debug/reloader when running under systemd (EDGE_DEBUG=0).
     debug = os.environ.get("EDGE_DEBUG", "1") == "1"
-    app.run(host=host, port=port, debug=debug)
+    # threaded=True: el stream SSE del dashboard mantiene una conexión abierta;
+    # sin hilos bloquearía el resto de requests (lecturas, etc.).
+    app.run(host=host, port=port, debug=debug, threaded=True)

@@ -11,8 +11,18 @@ from iotmonitoring.infrastructure.repositories import (
     SensorReadingRepository,
     StorageThresholdsRepository,
 )
+from shared.infrastructure.events import THRESHOLDS, bus
 
 logger = logging.getLogger(__name__)
+
+
+def _thresholds_changed(a: StorageThresholds, b: StorageThresholds) -> bool:
+    return (
+        a.min_temperature != b.min_temperature
+        or a.max_temperature != b.max_temperature
+        or a.min_humidity != b.min_humidity
+        or a.max_humidity != b.max_humidity
+    )
 
 
 class TelemetrySyncService:
@@ -124,7 +134,12 @@ class TelemetrySyncService:
             )
             return None
 
-        return self.thresholds_repository.save_current(thresholds)
+        previous = self.thresholds_repository.find_current_by_device_id(device_id)
+        saved = self.thresholds_repository.save_current(thresholds)
+        # Empuja al dashboard en vivo solo si los umbrales realmente cambiaron.
+        if previous is None or _thresholds_changed(previous, saved):
+            bus.publish(THRESHOLDS)
+        return saved
 
     def pull_all_thresholds(self) -> int:
         updated = 0

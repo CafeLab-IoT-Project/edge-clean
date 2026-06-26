@@ -155,7 +155,7 @@ controlan un actuador cada una:
 
 **Umbrales por defecto** (si un dispositivo aún no tiene umbrales): 18–22 °C / 55–65 % HR.
 
-**Rangos permitidos para umbrales:** Temp 10–30 °C, Humedad 40–80 %.
+**Rango permitido para umbrales:** igual al rango físico del sensor (Temp −40 a 80 °C, Humedad 0–100 %); la única regla es `min ≤ max`. Se alineó con el backend para no rechazar configuraciones válidas (p. ej. 0/99).
 **Rango físico del sensor (validación de lectura):** Temp −40 a 80 °C, Humedad 0–100 %.
 
 **Estado de conexión del sensor:** si la última lectura tiene > **120 s**, el sensor se considera **`OFFLINE`**, si no **`ONLINE`**.
@@ -353,7 +353,7 @@ Sin credenciales → la sync queda **deshabilitada** y el edge corre **100 % sta
 - Sensor `OFFLINE` tras: **120 s** sin lecturas.
 - Actuadores: **2 independientes** — humedad (pin 18) y temperatura (pin 19), cada uno se activa si su variable sale de rango (`> max` o `< min`).
 - Umbrales por defecto: **18–22 °C / 55–65 % HR**.
-- Rango permitido de umbrales: **10–30 °C / 40–80 % HR**.
+- Rango permitido de umbrales: **igual al físico, −40–80 °C / 0–100 % HR** (solo se valida `min ≤ max`).
 - Batch de push del outbox: **50** lecturas.
 - JWT del backend: **Bearer**, renovado automáticamente ante `401`.
 - 3 repos · 3 capas · 1 firmware genérico para N dispositivos.
