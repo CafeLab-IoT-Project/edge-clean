@@ -217,8 +217,8 @@ DASHBOARD_HTML = """<!doctype html>
     }
     .payload b { color: var(--muted); font-family: system-ui, sans-serif; font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; }
     .payload pre {
-      margin: .12rem 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      color: #cbd7e5; max-width: 100%;
+      margin: .12rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
+      color: #cbd7e5; max-width: 100%; overflow: hidden;
     }
     @keyframes flowFade {
       0% { opacity: 0; transform: translateY(14px) scale(.985); }
@@ -353,15 +353,13 @@ DASHBOARD_HTML = """<!doctype html>
 
     function fmt(n, d = 1) { return (n === null || n === undefined) ? '--' : Number(n).toFixed(d); }
     function briefValue(value) {
-      if (value === null || value === undefined) return '-';
-      if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-      if (typeof value === 'string') return value.length > 34 ? value.slice(0, 31) + '...' : value;
-      return String(value);
+      if (value === null || value === undefined) return value;
+      if (typeof value === 'string') return value.length > 42 ? value.slice(0, 39) + '...' : value;
+      return value;
     }
 
-    function compact(value) {
-      if (value === null || value === undefined || value === '') return '-';
-      if (typeof value === 'object' && !Array.isArray(value)) {
+    function summarizeObject(value) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
         const preferred = [
           'deviceId', 'coffeeLotId', 'temperature', 'humidity', 'timestamp',
           'status', 'readingId', 'actuatorCommand', 'humidityAlert',
@@ -372,13 +370,22 @@ DASHBOARD_HTML = """<!doctype html>
         for (const key of Object.keys(value)) {
           if (!keys.includes(key) && keys.length < 6) keys.push(key);
         }
-        const text = keys.slice(0, 6).map((key) => key + '=' + briefValue(value[key])).join(', ');
-        return text.length > 170 ? text.slice(0, 167) + '...' : text;
+        const out = {};
+        for (const key of keys.slice(0, 6)) out[key] = briefValue(value[key]);
+        return out;
+      }
+      return value;
+    }
+
+    function compact(value) {
+      if (value === null || value === undefined || value === '') return '-';
+      if (typeof value === 'object') {
+        return JSON.stringify(summarizeObject(value), null, 2);
       }
       const text = Array.isArray(value)
-        ? '[' + value.slice(0, 3).map(briefValue).join(', ') + (value.length > 3 ? ', ...' : '') + ']'
+        ? JSON.stringify(value.slice(0, 3).map(briefValue), null, 2)
         : briefValue(value);
-      return text.length > 170 ? text.slice(0, 167) + '...' : text;
+      return String(text);
     }
 
     function addFlow(flow) {
@@ -414,7 +421,7 @@ DASHBOARD_HTML = """<!doctype html>
       item.querySelector('.res').textContent = responseText;
 
       list.prepend(item);
-      while (list.querySelectorAll('.flow-item').length > 3) list.lastElementChild.remove();
+      while (list.querySelectorAll('.flow-item').length > 2) list.lastElementChild.remove();
       setTimeout(() => item.remove(), 6600);
     }
 
