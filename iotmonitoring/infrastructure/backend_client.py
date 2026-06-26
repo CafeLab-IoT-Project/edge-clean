@@ -5,6 +5,7 @@ import requests
 from dateutil.parser import parse
 
 from shared.infrastructure.config import BackendConfig
+from shared.infrastructure.events import FLOW, bus
 
 
 class BackendError(Exception):
@@ -43,26 +44,69 @@ def _to_backend_timestamp(value) -> str:
 class BackendClient:
     """Outbound client to the CafeLab Java backend (service-account / JWT)."""
 
-    def __init__(self, config: BackendConfig | None = None):
+    def __init__(self, config: BackendConfig | None = None, source: str = "edge backend"):
         self.config = config or BackendConfig.resolve()
+        self.source = source
         self._token: str | None = None
         self._lock = threading.Lock()
 
     def _url(self, path: str) -> str:
         return f"{self.config.base_url.rstrip('/')}{path}"
 
+    def _publish_flow(
+        self,
+        method: str,
+        path: str,
+        request_payload=None,
+        status: int | None = None,
+        response_payload=None,
+        error: str | None = None,
+    ) -> None:
+        bus.publish(
+            FLOW,
+            {
+                "side": "right",
+                "source": self.source,
+                "method": method,
+                "endpoint": path,
+                "request": request_payload,
+                "status": status,
+                "response": response_payload,
+                "error": error,
+            },
+        )
+
+    @staticmethod
+    def _response_payload(response: requests.Response):
+        try:
+            return response.json()
+        except ValueError:
+            text = response.text or ""
+            return text[:500] if text else None
+
     def sign_in(self) -> str:
+        path = "/api/v1/authentication/sign-in"
+        payload = {
+            "email": self.config.service_email,
+            "password": self.config.service_password,
+        }
         try:
             response = requests.post(
-                self._url("/api/v1/authentication/sign-in"),
-                json={
-                    "email": self.config.service_email,
-                    "password": self.config.service_password,
-                },
+                self._url(path),
+                json=payload,
                 timeout=self.config.timeout_seconds,
             )
         except requests.RequestException as error:
+            self._publish_flow("POST", path, payload, error=str(error))
             raise BackendUnavailableError(f"sign-in request failed: {error}")
+
+        self._publish_flow(
+            "POST",
+            path,
+            payload,
+            response.status_code,
+            self._response_payload(response),
+        )
 
         if response.status_code != 200:
             raise BackendAuthError(
@@ -86,6 +130,7 @@ class BackendClient:
 
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
         """Send an authenticated request, re-signing once on a 401."""
+        request_payload = kwargs.get("json")
         try:
             response = requests.request(
                 method,
@@ -95,7 +140,16 @@ class BackendClient:
                 **kwargs,
             )
         except requests.RequestException as error:
+            self._publish_flow(method, path, request_payload, error=str(error))
             raise BackendUnavailableError(f"{method} {path} failed: {error}")
+
+        self._publish_flow(
+            method,
+            path,
+            request_payload,
+            response.status_code,
+            self._response_payload(response),
+        )
 
         if response.status_code == 401:
             self.sign_in()
@@ -108,7 +162,15 @@ class BackendClient:
                     **kwargs,
                 )
             except requests.RequestException as error:
+                self._publish_flow(method, path, request_payload, error=str(error))
                 raise BackendUnavailableError(f"{method} {path} retry failed: {error}")
+            self._publish_flow(
+                method,
+                path,
+                request_payload,
+                response.status_code,
+                self._response_payload(response),
+            )
 
         return response
 

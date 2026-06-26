@@ -1,32 +1,55 @@
-"""Bus de eventos en memoria para empujar cambios del edge a consumidores en vivo.
+"""In-memory event bus for live edge dashboard updates."""
 
-El endpoint SSE del dashboard se suscribe aquí; los caminos de código que cambian
-datos (una lectura nueva, un umbral actualizado) publican un evento, de modo que la
-pantalla se refresca en el instante en que el dato cambia, sin polling.
-
-Es deliberadamente simple: el payload es solo una etiqueta; cada consumidor
-reconstruye su propio snapshot cuando recibe la señal.
-"""
 import logging
 import queue
 import threading
+from datetime import datetime, timezone
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Etiquetas de evento.
 READING = "reading"
 THRESHOLDS = "thresholds"
+FLOW = "flow"
+
+SENSITIVE_KEYS = {
+    "api_key",
+    "apikey",
+    "apiKey",
+    "authorization",
+    "password",
+    "token",
+    "x-api-key",
+    "X-API-Key",
+}
+
+
+def redact(value: Any):
+    if isinstance(value, dict):
+        return {
+            key: "***"
+            if str(key) in SENSITIVE_KEYS or str(key).lower() in SENSITIVE_KEYS
+            else redact(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [redact(item) for item in value]
+    return value
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 class EventBus:
-    """Pub/sub thread-safe: cada suscriptor recibe su propia cola."""
+    """Thread-safe pub/sub where each subscriber owns its queue."""
 
     def __init__(self):
         self._subscribers: set[queue.Queue] = set()
         self._lock = threading.Lock()
 
-    def subscribe(self) -> "queue.Queue[str]":
-        q: queue.Queue[str] = queue.Queue(maxsize=100)
+    def subscribe(self) -> "queue.Queue[dict]":
+        q: queue.Queue[dict] = queue.Queue(maxsize=100)
         with self._lock:
             self._subscribers.add(q)
         return q
@@ -35,16 +58,19 @@ class EventBus:
         with self._lock:
             self._subscribers.discard(q)
 
-    def publish(self, event_type: str) -> None:
+    def publish(self, event_type: str, payload: dict | None = None) -> None:
+        event = {
+            "type": event_type,
+            "payload": redact(payload or {}),
+            "at": utc_now(),
+        }
         with self._lock:
             subscribers = list(self._subscribers)
         for q in subscribers:
             try:
-                q.put_nowait(event_type)
+                q.put_nowait(event)
             except queue.Full:
-                # Consumidor lento: descartamos en vez de bloquear al productor.
-                logger.debug("Drop %s: cola de un suscriptor llena", event_type)
+                logger.debug("Drop %s: subscriber queue is full", event_type)
 
 
-# Singleton compartido por todo el edge.
 bus = EventBus()

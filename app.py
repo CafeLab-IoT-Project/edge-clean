@@ -1,7 +1,7 @@
 import logging
 import os
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 from iam.application.services import IamApplicationService
 from iam.interfaces.services import iam_api
@@ -9,6 +9,7 @@ from iotmonitoring.interfaces.account_services import onboarding_api
 from iotmonitoring.interfaces.dashboard_services import dashboard_api
 from iotmonitoring.interfaces.services import iotmonitoring_api
 from shared.infrastructure.database import init_db
+from shared.infrastructure.events import FLOW, bus
 from shared.infrastructure.sync_worker import worker as sync_worker
 
 # Emit INFO logs (sync pushes/pulls) to stderr -> systemd journal.
@@ -27,6 +28,29 @@ app.register_blueprint(dashboard_api)
 first_request = True
 
 
+def _json_request_payload():
+    if request.is_json:
+        return request.get_json(silent=True) or {}
+    if request.form:
+        return request.form.to_dict(flat=True)
+    return None
+
+
+def _json_response_payload(response):
+    if response.is_streamed or response.direct_passthrough:
+        return None
+    if response.mimetype == "application/json":
+        return response.get_json(silent=True)
+    return None
+
+
+def _should_trace_request() -> bool:
+    path = request.path
+    if path.startswith("/api/v1/edge/dashboard") or path == "/dashboard":
+        return False
+    return path.startswith("/api/v1/edge") or path.startswith("/api/v1/iam")
+
+
 @app.before_request
 def setup():
     global first_request
@@ -35,6 +59,25 @@ def setup():
         init_db()
         IamApplicationService().get_or_create_development_device()
         sync_worker.start()
+
+
+@app.after_request
+def publish_request_flow(response):
+    if _should_trace_request():
+        bus.publish(
+            FLOW,
+            {
+                "side": "left",
+                "source": "edge endpoint",
+                "method": request.method,
+                "endpoint": request.path,
+                "query": request.args.to_dict(flat=True),
+                "request": _json_request_payload(),
+                "status": response.status_code,
+                "response": _json_response_payload(response),
+            },
+        )
+    return response
 
 
 @app.route("/", methods=["GET"])

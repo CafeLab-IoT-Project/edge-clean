@@ -1,15 +1,5 @@
-"""Dashboard local del edge (para el monitor del Raspberry Pi).
+"""Local live dashboard for the Raspberry Pi edge monitor."""
 
-Sirve una pantalla en vivo via SSE: muestra la temperatura/humedad actuales y los
-umbrales del dispositivo principal (el más recientemente activo CON lote asignado),
-y se actualiza en el instante en que llega una lectura o cambian los umbrales
-(empujado por el bus de eventos, sin polling).
-
-Rutas:
-- GET /dashboard                      -> la página HTML.
-- GET /api/v1/edge/dashboard          -> snapshot JSON (debug / fallback).
-- GET /api/v1/edge/dashboard/stream   -> stream SSE (text/event-stream).
-"""
 import json
 import queue
 from datetime import datetime, timezone
@@ -19,7 +9,7 @@ from flask import Blueprint, Response, jsonify, request
 from iam.application.services import IamApplicationService
 from iotmonitoring.application.services import IoTMonitoringApplicationService
 from iotmonitoring.infrastructure.repositories import SensorReadingRepository
-from shared.infrastructure.events import bus
+from shared.infrastructure.events import FLOW, READING, THRESHOLDS, bus
 
 dashboard_api = Blueprint("dashboard_api", __name__)
 
@@ -39,7 +29,6 @@ def _format_dt(value) -> str | None:
 
 
 def _assigned_devices() -> list:
-    """Solo dispositivos vinculados a un lote (lot_id != null)."""
     return [d for d in iam_service.get_all_devices() if d.lot_id is not None]
 
 
@@ -54,8 +43,6 @@ def _last_seen(device_id: str) -> datetime | None:
 
 
 def _select_device(requested_id: str | None = None):
-    """Elige el dispositivo a mostrar: el solicitado (si tiene lote) o, por
-    defecto, el más recientemente activo entre los que tienen lote."""
     devices = _assigned_devices()
     if not devices:
         return None
@@ -116,6 +103,10 @@ def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
+def _snapshot_message(requested_id: str | None = None) -> dict:
+    return {"kind": "snapshot", "snapshot": build_snapshot(requested_id)}
+
+
 @dashboard_api.route("/api/v1/edge/dashboard/stream", methods=["GET"])
 def dashboard_stream():
     requested_id = request.args.get("deviceId")
@@ -123,20 +114,24 @@ def dashboard_stream():
     def generate():
         q = bus.subscribe()
         try:
-            # Snapshot inicial inmediato (para no esperar al primer evento).
-            yield _sse(build_snapshot(requested_id))
+            yield _sse(_snapshot_message(requested_id))
             while True:
                 try:
-                    q.get(timeout=15)
-                    # Coalesce: si llegó una ráfaga de eventos, un solo refresco.
+                    event = q.get(timeout=15)
+                    events = [event]
                     try:
                         while True:
-                            q.get_nowait()
+                            events.append(q.get_nowait())
                     except queue.Empty:
                         pass
-                    yield _sse(build_snapshot(requested_id))
+
+                    for item in events:
+                        if item.get("type") == FLOW:
+                            yield _sse({"kind": "flow", "flow": item.get("payload", {})})
+
+                    if any(item.get("type") in (READING, THRESHOLDS) for item in events):
+                        yield _sse(_snapshot_message(requested_id))
                 except queue.Empty:
-                    # Heartbeat (comentario SSE) para mantener viva la conexión.
                     yield ": keepalive\n\n"
         finally:
             bus.unsubscribe(q)
@@ -162,98 +157,162 @@ DASHBOARD_HTML = """<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CafeLab Edge — Dashboard</title>
+  <title>CafeLab Edge - Dashboard</title>
   <style>
     :root {
-      --bg: #0e1116; --panel: #171c24; --muted: #8a97a6; --text: #f2f5f8;
-      --ok: #2ecc71; --alert: #e74c3c; --warn: #f1c40f; --line: #232b36;
+      --bg: #0d1117; --panel: #171d26; --panel2: #121820; --muted: #93a1b2;
+      --text: #f4f7fb; --ok: #2ecc71; --alert: #ef5350; --warn: #f1c40f;
+      --line: #2a3442; --in: #4aa3ff; --out: #c9a227;
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; }
+    html, body { margin: 0; min-height: 100%; }
     body {
       background: var(--bg); color: var(--text);
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      display: flex; flex-direction: column; min-height: 100vh; padding: 2.5vh 3vw;
+      min-height: 100vh; padding: 2vh 2vw; display: flex; flex-direction: column;
     }
     header { display: flex; align-items: center; justify-content: space-between; gap: 1em; }
-    .brand { font-size: 1.4rem; font-weight: 700; letter-spacing: .5px; }
-    .brand small { color: var(--muted); font-weight: 400; font-size: .9rem; }
-    .conn { display: flex; align-items: center; gap: .5em; color: var(--muted); font-size: 1rem; }
+    .brand { font-size: 1.35rem; font-weight: 800; }
+    .brand small { color: var(--muted); font-weight: 500; font-size: .9rem; }
+    .conn { display: flex; align-items: center; gap: .55em; color: var(--muted); font-size: 1rem; }
     .dot { width: .8em; height: .8em; border-radius: 50%; background: var(--muted); }
     .dot.online { background: var(--ok); box-shadow: 0 0 .6em var(--ok); }
     .dot.offline { background: var(--alert); }
 
-    main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 3vh; }
-    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 3vw; }
-    .card {
-      background: var(--panel); border: 1px solid var(--line); border-radius: 1rem;
-      padding: 3vh 2vw; text-align: center; transition: border-color .3s;
+    .stage {
+      flex: 1; min-height: 0; display: grid;
+      grid-template-columns: minmax(260px, .72fr) minmax(390px, 1.35fr) minmax(260px, .72fr);
+      gap: 1.25vw; margin-top: 2vh;
     }
-    .card .label { color: var(--muted); font-size: 1.5rem; text-transform: uppercase; letter-spacing: 2px; }
-    .card .value { font-size: 13vw; font-weight: 800; line-height: 1.05; margin: .1em 0; }
+    .flow-panel, main {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 1rem;
+      min-height: 0;
+    }
+    .flow-panel { padding: 1rem; display: flex; flex-direction: column; overflow: hidden; }
+    .flow-head { display: flex; justify-content: space-between; align-items: baseline; gap: .75rem; margin-bottom: .85rem; }
+    .flow-title { font-weight: 800; font-size: 1rem; text-transform: uppercase; letter-spacing: .08em; }
+    .flow-sub { color: var(--muted); font-size: .82rem; }
+    .flow-list { position: relative; flex: 1; display: flex; flex-direction: column; gap: .65rem; overflow: hidden; }
+    .flow-empty { color: var(--muted); border: 1px dashed var(--line); border-radius: .75rem; padding: .9rem; font-size: .9rem; }
+    .flow-item {
+      background: var(--panel2); border: 1px solid var(--line); border-left: .28rem solid var(--in);
+      border-radius: .8rem; padding: .75rem; animation: flowFade 6.5s ease forwards;
+      box-shadow: 0 1rem 2rem rgba(0,0,0,.18);
+    }
+    .flow-item.right { border-left-color: var(--out); }
+    .flow-row { display: flex; justify-content: space-between; align-items: center; gap: .7rem; margin-bottom: .55rem; }
+    .method { font-weight: 900; color: var(--text); font-size: .78rem; }
+    .endpoint { color: var(--text); font-family: ui-monospace, Consolas, monospace; font-size: .78rem; overflow-wrap: anywhere; }
+    .code { color: var(--ok); font-weight: 800; font-size: .78rem; }
+    .code.err { color: var(--alert); }
+    .payload {
+      display: grid; grid-template-columns: 1fr; gap: .4rem;
+      font-family: ui-monospace, Consolas, monospace; font-size: .72rem; color: #dbe4ef;
+    }
+    .payload b { color: var(--muted); font-family: system-ui, sans-serif; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
+    .payload pre {
+      margin: .15rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere;
+      max-height: 5.6rem; overflow: hidden; color: #cbd7e5;
+    }
+    @keyframes flowFade {
+      0% { opacity: 0; transform: translateY(14px) scale(.985); }
+      10% { opacity: 1; transform: translateY(0) scale(1); }
+      78% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-10px) scale(.985); }
+    }
+
+    main { padding: 2.2vh 2vw; display: flex; flex-direction: column; justify-content: center; gap: 2.4vh; }
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4vw; }
+    .card {
+      background: var(--panel2); border: 1px solid var(--line); border-radius: 1rem;
+      padding: 3vh 1vw; text-align: center; transition: border-color .3s;
+    }
+    .card .label { color: var(--muted); font-size: 1.1rem; text-transform: uppercase; letter-spacing: .1em; }
+    .card .value { font-size: clamp(4rem, 8.2vw, 10rem); font-weight: 900; line-height: 1.02; margin: .08em 0; }
     .card .value.ok { color: var(--ok); }
     .card .value.alert { color: var(--alert); }
-    .card .unit { font-size: .35em; color: var(--muted); font-weight: 600; }
-    .card .range { color: var(--muted); font-size: 1.2rem; }
-
-    @keyframes pulse { 0% { transform: scale(1);} 30% { transform: scale(1.06);} 100% { transform: scale(1);} }
-    .pulse { animation: pulse .5s ease; }
-
+    .card .unit { font-size: .35em; color: var(--muted); font-weight: 700; }
+    .card .range { color: var(--muted); font-size: 1rem; }
     .thresholds {
-      background: var(--panel); border: 1px solid var(--line); border-radius: 1rem;
-      padding: 2vh 2vw; display: flex; align-items: center; justify-content: center;
-      gap: 3vw; font-size: 1.6rem; transition: background .2s, border-color .2s;
+      background: var(--panel2); border: 1px solid var(--line); border-radius: 1rem;
+      padding: 1.4rem; display: flex; align-items: center; justify-content: center;
+      gap: 1.3vw; font-size: 1.22rem; flex-wrap: wrap;
     }
-    .thresholds .t-label { color: var(--muted); font-size: 1.1rem; text-transform: uppercase; letter-spacing: 2px; }
+    .thresholds .t-label { color: var(--muted); font-size: .9rem; text-transform: uppercase; letter-spacing: .1em; }
     .thresholds b { color: var(--text); }
-    @keyframes flash { 0% { background: var(--warn); } 100% { background: var(--panel); } }
-    .flash { animation: flash 1.4s ease; border-color: var(--warn) !important; }
-
-    .badge { display: inline-block; padding: .15em .7em; border-radius: 1em; font-size: 1.2rem; font-weight: 700; }
+    .badge { display: inline-block; padding: .2em .75em; border-radius: 1em; font-size: 1rem; font-weight: 900; }
     .badge.OPTIMAL { background: rgba(46,204,113,.15); color: var(--ok); }
     .badge.WARNING { background: rgba(241,196,15,.15); color: var(--warn); }
-    .badge.DANGER  { background: rgba(231,76,60,.15); color: var(--alert); }
+    .badge.DANGER  { background: rgba(239,83,80,.15); color: var(--alert); }
+    @keyframes pulse { 0% { transform: scale(1);} 30% { transform: scale(1.055);} 100% { transform: scale(1);} }
+    .pulse { animation: pulse .5s ease; }
+    @keyframes flash { 0% { background: rgba(241,196,15,.45); } 100% { background: var(--panel2); } }
+    .flash { animation: flash 1.4s ease; border-color: var(--warn) !important; }
 
-    footer { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 1rem; margin-top: 2vh; }
+    footer { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: .95rem; margin-top: 1.5vh; }
     .toast {
       position: fixed; top: 2vh; left: 50%; transform: translateX(-50%);
-      background: var(--warn); color: #1a1a1a; font-weight: 700; padding: .6em 1.4em;
-      border-radius: 2em; opacity: 0; transition: opacity .3s; pointer-events: none; font-size: 1.2rem;
+      background: var(--warn); color: #181818; font-weight: 800; padding: .6em 1.4em;
+      border-radius: 2em; opacity: 0; transition: opacity .3s; pointer-events: none; font-size: 1rem;
     }
     .toast.show { opacity: 1; }
-    .empty { text-align: center; color: var(--muted); font-size: 1.8rem; line-height: 1.6; }
+    .empty { text-align: center; color: var(--muted); font-size: 1.35rem; line-height: 1.6; align-self: center; justify-self: center; }
     .empty code { color: var(--text); }
     .hidden { display: none !important; }
+    @media (max-width: 980px) {
+      body { padding: 1rem; }
+      .stage { grid-template-columns: 1fr; }
+      .flow-panel { min-height: 16rem; }
+      .cards { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <div id="toast" class="toast">Umbrales actualizados</div>
 
   <header>
-    <div class="brand">CafeLab <small id="device">— edge dashboard</small></div>
-    <div class="conn"><span id="dot" class="dot"></span><span id="conn">—</span></div>
+    <div class="brand">CafeLab <small id="device">- edge dashboard</small></div>
+    <div class="conn"><span id="dot" class="dot"></span><span id="conn">-</span></div>
   </header>
 
-  <main id="main" class="hidden">
-    <div class="cards">
-      <div class="card" id="card-temp">
-        <div class="label">Temperatura</div>
-        <div class="value" id="temp">--<span class="unit">°C</span></div>
-        <div class="range" id="temp-range">objetivo —</div>
+  <section class="stage">
+    <aside class="flow-panel">
+      <div class="flow-head">
+        <div class="flow-title">Entrada al edge</div>
+        <div class="flow-sub">ESP32 / UI -> Flask</div>
       </div>
-      <div class="card" id="card-hum">
-        <div class="label">Humedad</div>
-        <div class="value" id="hum">--<span class="unit">%</span></div>
-        <div class="range" id="hum-range">objetivo —</div>
+      <div id="edge-flow" class="flow-list"><div class="flow-empty">Esperando requests entrantes...</div></div>
+    </aside>
+
+    <main id="main" class="hidden">
+      <div class="cards">
+        <div class="card" id="card-temp">
+          <div class="label">Temperatura</div>
+          <div class="value" id="temp">--<span class="unit"> C</span></div>
+          <div class="range" id="temp-range">objetivo -</div>
+        </div>
+        <div class="card" id="card-hum">
+          <div class="label">Humedad</div>
+          <div class="value" id="hum">--<span class="unit">%</span></div>
+          <div class="range" id="hum-range">objetivo -</div>
+        </div>
       </div>
-    </div>
-    <div class="thresholds" id="thresholds">
-      <span class="t-label">Umbrales</span>
-      <span>T <b id="th-temp">—</b> °C</span>
-      <span>H <b id="th-hum">—</b> %</span>
-      <span class="badge" id="status">—</span>
-    </div>
-  </main>
+      <div class="thresholds" id="thresholds">
+        <span class="t-label">Umbrales</span>
+        <span>T <b id="th-temp">-</b> C</span>
+        <span>H <b id="th-hum">-</b> %</span>
+        <span class="badge" id="status">-</span>
+      </div>
+    </main>
+
+    <aside class="flow-panel">
+      <div class="flow-head">
+        <div class="flow-title">Sync worker</div>
+        <div class="flow-sub">Edge -> Backend</div>
+      </div>
+      <div id="sync-flow" class="flow-list"><div class="flow-empty">Esperando llamadas al backend...</div></div>
+    </aside>
+  </section>
 
   <div id="empty" class="empty hidden">
     No hay dispositivos vinculados a un lote.<br>
@@ -261,8 +320,8 @@ DASHBOARD_HTML = """<!doctype html>
   </div>
 
   <footer>
-    <span id="lot">—</span>
-    <span id="ago">—</span>
+    <span id="lot">-</span>
+    <span id="ago">-</span>
   </footer>
 
   <script>
@@ -270,39 +329,84 @@ DASHBOARD_HTML = """<!doctype html>
     let lastReadingId = null, lastThKey = null, lastRecordedAt = null;
 
     const es = new EventSource('/api/v1/edge/dashboard/stream' + location.search);
-    es.onmessage = (e) => render(JSON.parse(e.data));
-    es.onerror = () => setConn(null); // EventSource reconecta solo
+    es.onmessage = (e) => {
+      const message = JSON.parse(e.data);
+      if (message.kind === 'flow') addFlow(message.flow || {});
+      else render(message.snapshot || message);
+    };
+    es.onerror = () => setConn(null);
 
     function setConn(status) {
       const dot = $('dot'), label = $('conn');
       dot.className = 'dot' + (status === 'ONLINE' ? ' online' : status === 'OFFLINE' ? ' offline' : '');
-      label.textContent = status || 'reconectando…';
+      label.textContent = status || 'reconectando...';
     }
 
     function fmt(n, d = 1) { return (n === null || n === undefined) ? '--' : Number(n).toFixed(d); }
+    function compact(value) {
+      if (value === null || value === undefined || value === '') return '-';
+      const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      return text.length > 460 ? text.slice(0, 460) + '\\n...' : text;
+    }
+
+    function addFlow(flow) {
+      const isRight = flow.side === 'right';
+      const list = $(isRight ? 'sync-flow' : 'edge-flow');
+      const empty = list.querySelector('.flow-empty');
+      if (empty) empty.remove();
+
+      const item = document.createElement('article');
+      item.className = 'flow-item' + (isRight ? ' right' : '');
+
+      const code = flow.error ? 'ERR' : (flow.status || '-');
+      const bad = flow.error || (Number(flow.status) >= 400);
+      const requestText = compact(flow.request || (flow.query && Object.keys(flow.query).length ? { query: flow.query } : null));
+      const responseText = compact(flow.error ? { error: flow.error } : flow.response);
+
+      item.innerHTML =
+        '<div class="flow-row">' +
+          '<div><span class="method"></span> <span class="endpoint"></span></div>' +
+          '<span class="code"></span>' +
+        '</div>' +
+        '<div class="payload">' +
+          '<div><b>request</b><pre class="req"></pre></div>' +
+          '<div><b>response</b><pre class="res"></pre></div>' +
+        '</div>';
+
+      item.querySelector('.method').textContent = flow.method || '-';
+      item.querySelector('.endpoint').textContent = flow.endpoint || '-';
+      const codeEl = item.querySelector('.code');
+      codeEl.textContent = code;
+      if (bad) codeEl.classList.add('err');
+      item.querySelector('.req').textContent = requestText;
+      item.querySelector('.res').textContent = responseText;
+
+      list.prepend(item);
+      while (list.querySelectorAll('.flow-item').length > 5) list.lastElementChild.remove();
+      setTimeout(() => item.remove(), 6600);
+    }
 
     function render(s) {
       if (!s.hasDevice) {
         $('main').classList.add('hidden');
         $('empty').classList.remove('hidden');
-        $('device').textContent = '— sin dispositivos con lote';
+        $('device').textContent = '- sin dispositivos con lote';
         setConn(null);
         return;
       }
       $('empty').classList.add('hidden');
       $('main').classList.remove('hidden');
 
-      $('device').textContent = '— ' + s.deviceId;
-      $('lot').textContent = 'Lote: ' + (s.lotId ?? '—');
+      $('device').textContent = '- ' + s.deviceId;
+      $('lot').textContent = 'Lote: ' + (s.lotId ?? '-');
       setConn(s.connectionStatus);
 
       const th = s.thresholds || {};
-      $('th-temp').textContent = fmt(th.minTemperature) + '–' + fmt(th.maxTemperature);
-      $('th-hum').textContent = fmt(th.minHumidity) + '–' + fmt(th.maxHumidity);
-      $('temp-range').textContent = 'objetivo ' + fmt(th.minTemperature) + '–' + fmt(th.maxTemperature) + ' °C';
-      $('hum-range').textContent = 'objetivo ' + fmt(th.minHumidity) + '–' + fmt(th.maxHumidity) + ' %';
+      $('th-temp').textContent = fmt(th.minTemperature) + '-' + fmt(th.maxTemperature);
+      $('th-hum').textContent = fmt(th.minHumidity) + '-' + fmt(th.maxHumidity);
+      $('temp-range').textContent = 'objetivo ' + fmt(th.minTemperature) + '-' + fmt(th.maxTemperature) + ' C';
+      $('hum-range').textContent = 'objetivo ' + fmt(th.minHumidity) + '-' + fmt(th.maxHumidity) + ' %';
 
-      // Destello + toast cuando los umbrales cambian.
       const thKey = JSON.stringify(th);
       if (lastThKey !== null && thKey !== lastThKey) {
         flash($('thresholds'));
@@ -312,22 +416,20 @@ DASHBOARD_HTML = """<!doctype html>
 
       const r = s.reading;
       if (!r) {
-        $('temp').innerHTML = '--<span class="unit">°C</span>';
+        $('temp').innerHTML = '--<span class="unit"> C</span>';
         $('hum').innerHTML = '--<span class="unit">%</span>';
         $('status').textContent = 'sin lecturas';
         $('status').className = 'badge';
         return;
       }
 
-      $('temp').innerHTML = fmt(r.temperature) + '<span class="unit">°C</span>';
+      $('temp').innerHTML = fmt(r.temperature) + '<span class="unit"> C</span>';
       $('hum').innerHTML = fmt(r.humidity) + '<span class="unit">%</span>';
       $('temp').className = 'value ' + (r.temperatureAlert ? 'alert' : 'ok');
       $('hum').className = 'value ' + (r.humidityAlert ? 'alert' : 'ok');
-
       $('status').textContent = r.status;
       $('status').className = 'badge ' + r.status;
 
-      // Pulso cuando llega una lectura nueva.
       if (lastReadingId !== null && r.readingId !== lastReadingId) {
         pulse($('temp')); pulse($('hum'));
       }
@@ -345,11 +447,11 @@ DASHBOARD_HTML = """<!doctype html>
     }
 
     function tickAgo() {
-      if (!lastRecordedAt) { $('ago').textContent = '—'; return; }
+      if (!lastRecordedAt) { $('ago').textContent = '-'; return; }
       const secs = Math.max(0, Math.round((Date.now() - lastRecordedAt.getTime()) / 1000));
-      $('ago').textContent = 'última lectura hace ' + secs + ' s';
+      $('ago').textContent = 'ultima lectura hace ' + secs + ' s';
     }
-    setInterval(tickAgo, 1000); // solo cosmético (reloj), no pide datos
+    setInterval(tickAgo, 1000);
   </script>
 </body>
 </html>"""

@@ -37,7 +37,7 @@ class TelemetrySyncService:
     MIN_INTERVAL_SECONDS = 5
 
     def __init__(self, backend_client: BackendClient | None = None):
-        self.backend_client = backend_client or BackendClient()
+        self.backend_client = backend_client or BackendClient(source="sync-worker")
         self.device_repository = DeviceRepository()
         self.reading_repository = SensorReadingRepository()
         self.thresholds_repository = StorageThresholdsRepository()
