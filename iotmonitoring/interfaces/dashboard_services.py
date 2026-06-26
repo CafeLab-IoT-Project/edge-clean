@@ -181,12 +181,12 @@ DASHBOARD_HTML = """<!doctype html>
 
     .stage {
       flex: 1; min-height: 0; display: grid;
-      grid-template-columns: minmax(260px, .72fr) minmax(390px, 1.35fr) minmax(260px, .72fr);
+      grid-template-columns: minmax(250px, 25vw) minmax(430px, 1fr) minmax(250px, 25vw);
       gap: 1.25vw; margin-top: 2vh;
     }
     .flow-panel, main {
       background: var(--panel); border: 1px solid var(--line); border-radius: 1rem;
-      min-height: 0;
+      min-height: 0; min-width: 0;
     }
     .flow-panel { padding: 1rem; display: flex; flex-direction: column; overflow: hidden; }
     .flow-head { display: flex; justify-content: space-between; align-items: baseline; gap: .75rem; margin-bottom: .85rem; }
@@ -196,23 +196,29 @@ DASHBOARD_HTML = """<!doctype html>
     .flow-empty { color: var(--muted); border: 1px dashed var(--line); border-radius: .75rem; padding: .9rem; font-size: .9rem; }
     .flow-item {
       background: var(--panel2); border: 1px solid var(--line); border-left: .28rem solid var(--in);
-      border-radius: .8rem; padding: .75rem; animation: flowFade 6.5s ease forwards;
+      border-radius: .8rem; padding: .68rem; animation: flowFade 6.5s ease forwards;
       box-shadow: 0 1rem 2rem rgba(0,0,0,.18);
+      min-width: 0;
     }
     .flow-item.right { border-left-color: var(--out); }
-    .flow-row { display: flex; justify-content: space-between; align-items: center; gap: .7rem; margin-bottom: .55rem; }
+    .flow-row { display: flex; justify-content: space-between; align-items: center; gap: .7rem; margin-bottom: .48rem; min-width: 0; }
     .method { font-weight: 900; color: var(--text); font-size: .78rem; }
-    .endpoint { color: var(--text); font-family: ui-monospace, Consolas, monospace; font-size: .78rem; overflow-wrap: anywhere; }
+    .endpoint {
+      color: var(--text); font-family: ui-monospace, Consolas, monospace; font-size: .78rem;
+      display: inline-block; max-width: min(18vw, 18rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      vertical-align: bottom;
+    }
     .code { color: var(--ok); font-weight: 800; font-size: .78rem; }
     .code.err { color: var(--alert); }
     .payload {
-      display: grid; grid-template-columns: 1fr; gap: .4rem;
-      font-family: ui-monospace, Consolas, monospace; font-size: .72rem; color: #dbe4ef;
+      display: grid; grid-template-columns: 1fr; gap: .34rem;
+      font-family: ui-monospace, Consolas, monospace; font-size: .68rem; color: #dbe4ef;
+      min-width: 0;
     }
-    .payload b { color: var(--muted); font-family: system-ui, sans-serif; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
+    .payload b { color: var(--muted); font-family: system-ui, sans-serif; font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; }
     .payload pre {
-      margin: .15rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere;
-      max-height: 5.6rem; overflow: hidden; color: #cbd7e5;
+      margin: .12rem 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      color: #cbd7e5; max-width: 100%;
     }
     @keyframes flowFade {
       0% { opacity: 0; transform: translateY(14px) scale(.985); }
@@ -228,10 +234,13 @@ DASHBOARD_HTML = """<!doctype html>
       padding: 3vh 1vw; text-align: center; transition: border-color .3s;
     }
     .card .label { color: var(--muted); font-size: 1.1rem; text-transform: uppercase; letter-spacing: .1em; }
-    .card .value { font-size: clamp(4rem, 8.2vw, 10rem); font-weight: 900; line-height: 1.02; margin: .08em 0; }
+    .card .value {
+      font-size: clamp(3.4rem, 6.6vw, 7.6rem); font-weight: 900; line-height: 1.02;
+      margin: .08em 0; white-space: nowrap; letter-spacing: 0;
+    }
     .card .value.ok { color: var(--ok); }
     .card .value.alert { color: var(--alert); }
-    .card .unit { font-size: .35em; color: var(--muted); font-weight: 700; }
+    .card .unit { font-size: .32em; color: var(--muted); font-weight: 700; margin-left: .06em; }
     .card .range { color: var(--muted); font-size: 1rem; }
     .thresholds {
       background: var(--panel2); border: 1px solid var(--line); border-radius: 1rem;
@@ -343,10 +352,33 @@ DASHBOARD_HTML = """<!doctype html>
     }
 
     function fmt(n, d = 1) { return (n === null || n === undefined) ? '--' : Number(n).toFixed(d); }
+    function briefValue(value) {
+      if (value === null || value === undefined) return '-';
+      if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+      if (typeof value === 'string') return value.length > 34 ? value.slice(0, 31) + '...' : value;
+      return String(value);
+    }
+
     function compact(value) {
       if (value === null || value === undefined || value === '') return '-';
-      const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-      return text.length > 460 ? text.slice(0, 460) + '\\n...' : text;
+      if (typeof value === 'object' && !Array.isArray(value)) {
+        const preferred = [
+          'deviceId', 'coffeeLotId', 'temperature', 'humidity', 'timestamp',
+          'status', 'readingId', 'actuatorCommand', 'humidityAlert',
+          'temperatureAlert', 'thresholdsUpdated', 'readingsPushed',
+          'readingsPending', 'id', 'error'
+        ];
+        const keys = preferred.filter((key) => Object.prototype.hasOwnProperty.call(value, key));
+        for (const key of Object.keys(value)) {
+          if (!keys.includes(key) && keys.length < 6) keys.push(key);
+        }
+        const text = keys.slice(0, 6).map((key) => key + '=' + briefValue(value[key])).join(', ');
+        return text.length > 170 ? text.slice(0, 167) + '...' : text;
+      }
+      const text = Array.isArray(value)
+        ? '[' + value.slice(0, 3).map(briefValue).join(', ') + (value.length > 3 ? ', ...' : '') + ']'
+        : briefValue(value);
+      return text.length > 170 ? text.slice(0, 167) + '...' : text;
     }
 
     function addFlow(flow) {
@@ -382,7 +414,7 @@ DASHBOARD_HTML = """<!doctype html>
       item.querySelector('.res').textContent = responseText;
 
       list.prepend(item);
-      while (list.querySelectorAll('.flow-item').length > 5) list.lastElementChild.remove();
+      while (list.querySelectorAll('.flow-item').length > 3) list.lastElementChild.remove();
       setTimeout(() => item.remove(), 6600);
     }
 
