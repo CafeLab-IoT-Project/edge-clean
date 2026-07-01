@@ -52,7 +52,9 @@ http://127.0.0.1:5000
 | Metodo | Endpoint | Auth | Descripcion |
 |---|---|---|---|
 | POST | `/api/v1/iam/devices` | No | Registra un dispositivo y genera API key |
+| POST | `/api/v1/iam/devices/announce` | No | Auto-enroll (phone-home): el dispositivo se anuncia y recibe su API key |
 | POST | `/api/v1/iam/authentication` | `X-API-Key` | Valida `deviceId` + API key |
+| GET | `/api/v1/iam/devices` | No | Lista todos los dispositivos registrados |
 
 ### IoT Monitoring / Edge
 
@@ -66,6 +68,7 @@ http://127.0.0.1:5000
 | GET | `/api/v1/edge/sensor-status` | No | Consulta estado ONLINE/OFFLINE del sensor |
 | GET | `/api/v1/edge/actuator-events` | No | Lista eventos recientes del actuador |
 | POST | `/api/v1/edge/sync` | `X-API-Key` | Fuerza una sincronizacion con el backend |
+| GET | `/api/v1/edge/sync/status` | No | Estado del worker de sync (pendientes, habilitado, intervalo) |
 
 Los endpoints protegidos requieren:
 
@@ -248,8 +251,8 @@ Flujo:
 | `BACKEND_SERVICE_EMAIL` | — | Email de la cuenta de servicio |
 | `BACKEND_SERVICE_PASSWORD` | — | Password de la cuenta de servicio |
 | `BACKEND_SYNC_ENABLED` | `true` | Activa la sincronizacion |
-| `BACKEND_SYNC_INTERVAL_SECONDS` | `30` | Periodo del worker |
-| `BACKEND_TIMEOUT_SECONDS` | `5` | Timeout de las llamadas HTTP |
+| `BACKEND_SYNC_INTERVAL_SECONDS` | `10` | Periodo del worker |
+| `BACKEND_TIMEOUT_SECONDS` | `10` | Timeout de las llamadas HTTP |
 
 Si no se definen `BACKEND_SERVICE_EMAIL` y `BACKEND_SERVICE_PASSWORD`, la
 sincronizacion queda **deshabilitada** y el edge corre de forma 100% standalone

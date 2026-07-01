@@ -37,13 +37,13 @@ Dos saltos independientes:
 ### a) El edge está vinculado a una cuenta
 ```bash
 curl http://<PI>:5000/api/v1/edge/account
-# espera: {"configured": true, "baseUrl": "...", "email": "..."}
+# espera: {"configured": true, "backendUrl": "...", "email": "..."}
 ```
 Si sale `configured:false`, onboardea primero:
 ```bash
 curl -X POST http://<PI>:5000/api/v1/edge/account \
   -H "Content-Type: application/json" \
-  -d '{"baseUrl":"http://<BACKEND>","email":"dueno@cafelab.com","password":"TU_PASS"}'
+  -d '{"backendUrl":"http://<BACKEND>","email":"dueno@cafelab.com","password":"TU_PASS"}'
 ```
 
 ### b) Existe un coffee-lot en el backend
@@ -56,7 +56,7 @@ descartará esas lecturas.
 ## Paso 0 — IP del Pi y health check (desde la laptop)
 ```bash
 ping raspberrypi.local
-curl http://<PI>:5000/health
+curl http://<PI>:5000/
 ```
 
 ---
@@ -177,7 +177,7 @@ Deberías ver las lecturas reales del ESP32. Cierra el salto **edge → backend*
 
 ## Checklist antes de empezar
 - [ ] Backend deployado y alcanzable desde el Pi (`<BACKEND>`).
-- [ ] `baseUrl` onboardeado en el edge apunta a ese backend.
+- [ ] `backendUrl` onboardeado en el edge apunta a ese backend.
 - [ ] Existe un coffee-lot → `<LOT_ID>` anotado.
 - [ ] Pi, ESP32 y laptop en la **misma red WiFi**.
 - [ ] Recompilar el jar del backend incluyendo `monitoring` (ver HALLAZGOS.md #2).

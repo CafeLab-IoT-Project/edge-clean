@@ -1,14 +1,16 @@
 # Firmware TrackSilo (ESP32 + DHT22)
 
-Sensor que envía lecturas de temperatura/humedad al edge y acciona el
-deshumedecedor (LED en la versión académica) según la respuesta del edge.
+Sensor que envía lecturas de temperatura/humedad al edge y acciona **dos
+actuadores independientes** (humedad y temperatura) según las banderas
+`humidityAlert` / `temperatureAlert` que responde el edge.
 
 ## Hardware
 
 | Componente | Pin ESP32 (por defecto) |
 |---|---|
 | DHT22 (dato) | GPIO 4 |
-| Actuador / LED on-board | GPIO 2 |
+| Actuador de humedad (p. ej. deshumidificador) | GPIO 18 |
+| Actuador de temperatura (p. ej. enfriador/calefactor) | GPIO 19 |
 
 DHT22: VCC a 3V3, GND a GND, DATA a GPIO 4 (resistencia pull-up de 10k entre
 DATA y VCC si tu módulo no la trae).
@@ -70,8 +72,8 @@ En el Monitor Serie deberías ver algo como:
 [mdns] edge por servicio 'cafelab': 192.168.18.129:5000 (raspberrypi)
 [announce] ok; PENDIENTE: asigna un lote en /onboarding
 [dht] T=21.4C H=58.0%
-[edge] 201 {"status":"OPTIMAL","actuatorCommand":"NONE",...}
-[actuador] NONE
+[edge] 201 {"status":"OPTIMAL","actuatorCommand":"NONE","humidityAlert":false,"temperatureAlert":false,...}
+[actuador] humedad=OFF temperatura=OFF
 ```
 
 ## Notas
@@ -80,6 +82,9 @@ En el Monitor Serie deberías ver algo como:
   / `usando IP fija`. Si mDNS falla, la IP de respaldo lo cubre.
 - El intervalo de 30 s mantiene el sensor como `ONLINE` (el edge marca `OFFLINE`
   tras 2 min sin lecturas).
-- El edge solo emite `ACTIVATE` / `NONE`; el firmware enciende el actuador con
-  `ACTIVATE` (solo reacciona a **humedad** alta) y lo apaga en cualquier otro caso.
+- El firmware enciende cada actuador de forma independiente según las banderas de
+  la respuesta: `humidityAlert` → **pin 18** y `temperatureAlert` → **pin 19**
+  (cada una se activa cuando su variable está fuera de rango: `> max` o `< min`),
+  y los apaga cuando la bandera vuelve a `false`. El campo `actuatorCommand`
+  (`ACTIVATE`/`NONE`) se mantiene solo por compatibilidad; el firmware ya no lo usa.
 - Para simular varios IoT en una placa de pruebas, usa `DEVICE_ID_OVERRIDE`.

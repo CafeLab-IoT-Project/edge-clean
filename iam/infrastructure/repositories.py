@@ -1,5 +1,5 @@
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 import peewee
 
@@ -74,7 +74,7 @@ class DeviceRepository:
             defaults={
                 "api_key": "test-api-key-123",
                 "lot_id": None,
-                "created_at": datetime.utcnow(),
+                "created_at": datetime.now(timezone.utc).replace(tzinfo=None),
             },
         )
         return Device(

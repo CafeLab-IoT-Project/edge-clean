@@ -1,6 +1,6 @@
 from typing import Optional
 from iam.domain.entities import Device
-from datetime import datetime
+from datetime import datetime, timezone
 
 class AuthService:
     @staticmethod
@@ -35,7 +35,7 @@ class DeviceRegistrationService:
             raise ValueError("device_id must contain only alphanumeric, dash, and underscore characters")
 
         api_key = DeviceRegistrationService.generate_api_key()
-        created_at = datetime.utcnow()
+        created_at = datetime.now(timezone.utc).replace(tzinfo=None)
         
         return Device(device_id, api_key, lot_id, created_at)
     

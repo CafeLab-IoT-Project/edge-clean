@@ -63,9 +63,12 @@ backend valida que el coffeeLot **exista** (no la propiedad), así que el edge
 ingesta como cuenta de servicio y el dato se atribuye por el lote.
 
 ### 8. mDNS: el hostname del Pi quedó como `raspberrypi`, no `cafelab-edge`
-El firmware del ESP32 busca `cafelab-edge.local` por defecto. → O cambiar el
-hostname del Pi (`sudo hostnamectl set-hostname cafelab-edge`) o ajustar
-`EDGE_HOST`/`EDGE_FALLBACK_IP` en el `.ino`.
+El descubrimiento principal del firmware es por **servicio** `_cafelab._tcp`
+(`EDGE_SERVICE = "cafelab"`), que Avahi anuncia independientemente del hostname.
+Como respaldo, el firmware resuelve por hostname `raspberrypi` (`EDGE_HOST`) y
+luego por `EDGE_FALLBACK_IP`. → Basta con instalar el servicio Avahi en el Pi; si
+se prefiere el respaldo por hostname, alinea `EDGE_HOST`/`EDGE_FALLBACK_IP` del
+`.ino` con el hostname/IP reales del Pi.
 
 ### 9. Formato de timestamp
 El backend mapea `timestamp` a `LocalDateTime` (sin zona). El edge envía UTC sin
@@ -88,7 +91,9 @@ El backend mapea `timestamp` a `LocalDateTime` (sin zona). El edge envía UTC si
 - `cafelab-edge.service` (systemd) — edge Flask, enabled, en `0.0.0.0:5000`.
 - `cafelab-wifi-portal.service` (systemd) — portal cautivo, enabled; abre el AP
   `CafeLab-Setup` solo si no hay WiFi al arrancar.
-- Hostname: `raspberrypi` (ajustar a `cafelab-edge` si se usa el firmware por mDNS).
+- Hostname: `raspberrypi`. El firmware descubre el edge por servicio mDNS
+  (`_cafelab._tcp`), así que no depende de renombrar el host; el respaldo por
+  hostname del `.ino` (`EDGE_HOST`) ya apunta a `raspberrypi`.
 
 ## Pendientes / recomendaciones
 
