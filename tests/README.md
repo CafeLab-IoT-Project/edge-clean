@@ -12,6 +12,7 @@ de la API Flask y la orquestación de sincronización con el backend.
 | `test_edge_api.py` | API (HTTP) | Endpoints Flask: health, auth, lecturas, umbrales por defecto, sensor OFFLINE, sync, announce. |
 | `test_account_onboarding.py` | API (HTTP) | Onboarding de cuenta `/api/v1/edge/account` (mockea `sign_in`). |
 | `test_sync_services.py` | Application | Sync worker: outbox (push), dispositivos sin lote, rechazos 4xx, pull de umbrales. |
+| `acceptance/` | Aceptación (BDD) | Escenarios Gherkin (`.feature`) + step definitions con `pytest-bdd`: control del actuador, buffering offline. |
 
 ## Instalación (una sola vez)
 
@@ -21,7 +22,8 @@ Desde la raíz del repo (`edge-clean`):
 pip install -r requirements-dev.txt
 ```
 
-Trae las dependencias de runtime (`requirements.txt`) **más** `pytest`.
+Trae las dependencias de runtime (`requirements.txt`) **más** `pytest` y
+`pytest-bdd` (para los tests de aceptación en Gherkin).
 
 > **Recomendado:** usar un entorno virtual para no ensuciar el Python global.
 >
@@ -46,6 +48,8 @@ Siempre desde la raíz del repo:
 | `python -m pytest -x` | Se detiene en el **primer** fallo. |
 | `python -m pytest --lf` | Re-corre solo los que fallaron la última vez (*last-failed*). |
 | `python -m pytest -s` | Muestra los `print()` (no captura stdout). |
+| `python -m pytest tests/acceptance` | Solo los tests de aceptación (Gherkin). |
+| `python -m pytest --ignore=tests/acceptance` | Todo **menos** aceptación (unit + integración). |
 
 > Usa `python -m pytest` en vez de `pytest` a secas: garantiza que se use el
 > Python/entorno correcto y que la raíz del proyecto quede en el `sys.path` (así
@@ -101,6 +105,33 @@ reventó, y compara *obtenido vs esperado*.
 |---|---|---|
 | `db_session` | Base SQLite temporal ya inicializada + dispositivo de desarrollo (`tracksilo-001`). | Tests de repositorios / application. |
 | `app_client` | Cliente de test de Flask (`app.test_client()`) con el worker neutralizado. Depende de `db_session`. | Tests de endpoints HTTP. |
+
+## Tests de aceptación (BDD / Gherkin)
+
+Viven en `tests/acceptance/` y describen el sistema **desde el punto de vista del
+usuario/negocio**, en lenguaje natural. Los archivos `.feature` son legibles por
+no-técnicos, así que su texto se puede copiar tal cual al informe.
+
+```
+acceptance/
+  features/
+    actuator_control.feature     # escenarios en Gherkin (Given/When/Then)
+    offline_buffering.feature
+  test_acceptance.py             # step definitions (@given/@when/@then)
+```
+
+- El `.feature` describe **qué** comportamiento se espera.
+- `test_acceptance.py` implementa **cómo** se ejecuta cada paso, reusando la
+  fixture `app_client` (stack real Flask + SQLite, backend y worker neutralizados).
+- `scenarios("features")` enlaza automáticamente todos los `.feature` de la carpeta.
+
+Correrlos:
+
+```powershell
+python -m pytest tests/acceptance -v
+```
+
+Cada escenario aparece como un test independiente (`test_<nombre_del_escenario>`).
 
 ## Áreas sin cubrir todavía
 
