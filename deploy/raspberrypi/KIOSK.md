@@ -95,6 +95,12 @@ Al volver, el Pi deberia entrar solo al dashboard a pantalla completa.
 - **Sale el globo "Restaurar paginas" tras un corte de luz**: ya se mitiga en el
   script limpiando `exit_type`/`exited_cleanly` de las Preferences y con
   `--disable-session-crashed-bubble`.
+- **Pide desbloquear el llavero ("Unlock Default Keyring")**: pasa porque el
+  autologin entra sin contrasena, asi que el llavero de GNOME nunca se desbloquea
+  y Chromium quiere usarlo. El script lo evita con `--password-store=basic` (el
+  dashboard no guarda secretos, no necesita el llavero). Alternativa permanente:
+  ponerle contrasena vacia al "Default Keyring" con `seahorse` para que el
+  autologin lo abra solo.
 - **La pantalla se apaga sola a los minutos**: el script ejecuta
   `xset s off -dpms`; si aun asi se apaga, revisa que corra bajo X11 (`rpd-x`) y no
   Wayland (ahi `xset` no aplica; usa la config del compositor).

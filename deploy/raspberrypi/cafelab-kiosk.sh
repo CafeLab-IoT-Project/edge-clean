@@ -60,6 +60,7 @@ while true; do
     --no-first-run \
     --check-for-update-interval=31536000 \
     --autoplay-policy=no-user-gesture-required \
+    --password-store=basic \
     "$KIOSK_URL"
   log "Chromium termino (codigo $?). Reintentando en 3s..."
   sleep 3
