@@ -56,7 +56,8 @@ while true; do
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \
-    --disable-features=Translate \
+    --disable-features=Translate,TranslateUI \
+    --lang=es-ES \
     --no-first-run \
     --check-for-update-interval=31536000 \
     --autoplay-policy=no-user-gesture-required \
