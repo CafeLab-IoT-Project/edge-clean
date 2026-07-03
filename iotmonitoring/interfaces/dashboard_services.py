@@ -165,11 +165,12 @@ DASHBOARD_HTML = """<!doctype html>
       --line: #2a3442; --in: #4aa3ff; --out: #c9a227;
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
     body {
       background: var(--bg); color: var(--text);
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      min-height: 100vh; padding: 2vh 2vw; display: flex; flex-direction: column;
+      height: 100dvh; padding: clamp(.45rem, 2vh, 1.4rem) clamp(.45rem, 2vw, 1.8rem);
+      display: flex; flex-direction: column;
     }
     header { display: flex; align-items: center; justify-content: space-between; gap: 1em; }
     .brand { font-size: 1.35rem; font-weight: 800; }
@@ -181,8 +182,8 @@ DASHBOARD_HTML = """<!doctype html>
 
     .stage {
       flex: 1; min-height: 0; display: grid;
-      grid-template-columns: minmax(250px, 25vw) minmax(430px, 1fr) minmax(250px, 25vw);
-      gap: 1.25vw; margin-top: 2vh;
+      grid-template-columns: clamp(9rem, 24vw, 19rem) minmax(0, 1fr) clamp(9rem, 24vw, 19rem);
+      gap: clamp(.45rem, 1.25vw, 1.4rem); margin-top: clamp(.45rem, 2vh, 1.4rem);
     }
     .flow-panel, main {
       background: var(--panel); border: 1px solid var(--line); border-radius: 1rem;
@@ -258,7 +259,7 @@ DASHBOARD_HTML = """<!doctype html>
     @keyframes flash { 0% { background: rgba(241,196,15,.45); } 100% { background: var(--panel2); } }
     .flash { animation: flash 1.4s ease; border-color: var(--warn) !important; }
 
-    footer { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: .95rem; margin-top: 1.5vh; }
+    footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: var(--muted); font-size: .95rem; margin-top: clamp(.35rem, 1.5vh, 1rem); }
     .toast {
       position: fixed; top: 2vh; left: 50%; transform: translateX(-50%);
       background: var(--warn); color: #181818; font-weight: 800; padding: .6em 1.4em;
@@ -269,10 +270,47 @@ DASHBOARD_HTML = """<!doctype html>
     .empty code { color: var(--text); }
     .hidden { display: none !important; }
     @media (max-width: 980px) {
-      body { padding: 1rem; }
-      .stage { grid-template-columns: 1fr; }
-      .flow-panel { min-height: 16rem; }
-      .cards { grid-template-columns: 1fr; }
+      body { padding: .45rem; }
+      header { gap: .45rem; }
+      .brand { font-size: .95rem; }
+      .brand small { font-size: .72rem; }
+      .conn { font-size: .78rem; }
+      .stage { grid-template-columns: 24vw minmax(0, 1fr) 24vw; gap: .45rem; margin-top: .45rem; }
+      .flow-panel { padding: .42rem; border-radius: .7rem; }
+      .flow-head { margin-bottom: .35rem; gap: .35rem; }
+      .flow-title { font-size: .64rem; letter-spacing: .06em; }
+      .flow-sub { display: none; }
+      .flow-list { gap: .35rem; }
+      .flow-empty { padding: .45rem; font-size: .65rem; border-radius: .55rem; }
+      .flow-item { padding: .42rem; border-radius: .55rem; border-left-width: .22rem; }
+      .flow-row { gap: .25rem; margin-bottom: .25rem; }
+      .method, .endpoint, .code { font-size: .58rem; }
+      .endpoint { max-width: 12vw; }
+      .payload { gap: .22rem; font-size: .52rem; }
+      .payload b { font-size: .5rem; }
+      main { padding: .65rem; gap: .55rem; border-radius: .7rem; }
+      .cards { gap: .55rem; }
+      .card { padding: .9rem .35rem; border-radius: .7rem; }
+      .card .label { font-size: .72rem; letter-spacing: .08em; }
+      .card .value { font-size: clamp(2.6rem, 8.6vw, 4.6rem); }
+      .card .range { font-size: .7rem; }
+      .thresholds { padding: .65rem; gap: .55rem; font-size: .78rem; border-radius: .7rem; }
+      .thresholds .t-label { font-size: .62rem; }
+      .badge { font-size: .68rem; }
+      footer { font-size: .68rem; margin-top: .35rem; }
+    }
+    @media (max-height: 620px) {
+      .flow-item:nth-of-type(n+2) { display: none; }
+      .payload pre { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+      .card { padding-top: .75rem; padding-bottom: .75rem; }
+      .thresholds { padding-top: .55rem; padding-bottom: .55rem; }
+    }
+    @media (max-height: 500px) {
+      header { min-height: 1.2rem; }
+      .card .label { font-size: .6rem; }
+      .card .range { font-size: .62rem; }
+      .card .value { font-size: clamp(2.1rem, 7.5vw, 3.4rem); }
+      .payload pre { -webkit-line-clamp: 3; }
     }
   </style>
 </head>
@@ -330,7 +368,7 @@ DASHBOARD_HTML = """<!doctype html>
 
   <footer>
     <span id="lot">-</span>
-    <span id="ago">-</span>
+    <span><span id="viewport">-</span> · <span id="ago">-</span></span>
   </footer>
 
   <script>
@@ -421,8 +459,13 @@ DASHBOARD_HTML = """<!doctype html>
       item.querySelector('.res').textContent = responseText;
 
       list.prepend(item);
-      while (list.querySelectorAll('.flow-item').length > 2) list.lastElementChild.remove();
+      while (list.querySelectorAll('.flow-item').length > maxFlowItems()) list.lastElementChild.remove();
       setTimeout(() => item.remove(), 6600);
+    }
+
+    function maxFlowItems() {
+      if (window.innerHeight <= 620 || window.innerWidth <= 980) return 1;
+      return 2;
     }
 
     function render(s) {
@@ -490,6 +533,15 @@ DASHBOARD_HTML = """<!doctype html>
       const secs = Math.max(0, Math.round((Date.now() - lastRecordedAt.getTime()) / 1000));
       $('ago').textContent = 'ultima lectura hace ' + secs + ' s';
     }
+    function updateViewport() {
+      $('viewport').textContent = window.innerWidth + 'x' + window.innerHeight;
+      for (const id of ['edge-flow', 'sync-flow']) {
+        const list = $(id);
+        while (list.querySelectorAll('.flow-item').length > maxFlowItems()) list.lastElementChild.remove();
+      }
+    }
+    window.addEventListener('resize', updateViewport);
+    updateViewport();
     setInterval(tickAgo, 1000);
   </script>
 </body>
