@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=CafeLab Kiosk
+Comment=Abre el dashboard del edge en pantalla completa al iniciar sesion
+Exec=/usr/local/bin/cafelab-kiosk.sh
+Terminal=false
+X-GNOME-Autostart-enabled=true

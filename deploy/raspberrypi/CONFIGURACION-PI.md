@@ -32,6 +32,8 @@ script, hay que **volver a copiarlos** y recargar systemd (ver §6).
 | `cafelab-wifi-portal.service` | `/etc/systemd/system/cafelab-wifi-portal.service` |
 | `cafelab-wifi-portal.sh` | `/usr/local/bin/cafelab-wifi-portal.sh` |
 | `avahi-cafelab-edge.service` | `/etc/avahi/services/cafelab-edge.service` |
+| `cafelab-kiosk.sh` | `/usr/local/bin/cafelab-kiosk.sh` |
+| `cafelab-kiosk.desktop` | `/home/pi/.config/autostart/cafelab-kiosk.desktop` |
 | (código del edge) | `/home/pi/edge-clean` |
 | (venv de Python) | `/home/pi/edge-clean/.venv` |
 | (base de datos SQLite) | `/home/pi/edge-clean/edge_clean.db` |
@@ -173,6 +175,7 @@ curl http://raspberrypi.local:5000/api/v1/edge/account     # ¿cuenta vinculada?
 ---
 
 ## Documentos relacionados
+- [KIOSK.md](KIOSK.md) — dashboard a pantalla completa (kiosko) al arrancar.
 - [README.md](README.md) — instalación del portal WiFi (Parte B).
 - [edge-discovery.md](edge-discovery.md) — mDNS/Avahi.
 - [../GUIA-DESPLIEGUE.md](../GUIA-DESPLIEGUE.md) — runbook de despliegue completo.

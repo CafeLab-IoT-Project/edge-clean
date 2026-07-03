@@ -74,6 +74,58 @@ se prefiere el respaldo por hostname, alinea `EDGE_HOST`/`EDGE_FALLBACK_IP` del
 El backend mapea `timestamp` a `LocalDateTime` (sin zona). El edge envía UTC sin
 `Z` (`2026-06-06T20:46:27`) — ya manejado en `backend_client.py`.
 
+### 10. Monitor HDMI en "No Signal" tras desconectar/reconectar (Pi 4, KMS) — 2026-07-03
+El monitor (uno antiguo) mostraba **"No Signal"** aunque el Pi tenía corriente.
+Curioso: funcionaba **una vez** tras un reinicio con el cable puesto, pero al
+**desenchufar y volver a enchufar** el HDMI se quedaba en "No Signal".
+
+Diagnóstico (por SSH, sin depender de la pantalla):
+
+```bash
+cat /proc/device-tree/model                    # Raspberry Pi 4 Model B
+grep -Ei 'hdmi|vc4-kms' /boot/firmware/config.txt   # dtoverlay=vc4-kms-v3d (driver KMS)
+# El conector reporta "connected" (el pin HPD sí se detecta)...
+for c in /sys/class/drm/card*-HDMI-A-*/status; do echo "$c: $(cat $c)"; done
+sudo cat /sys/class/drm/card1-HDMI-A-1/edid | wc -c   # ...pero EDID = 0 bytes
+dmesg | grep -iE 'edid|hdmi'                    # "EDID block 0 is all zeroes"
+```
+
+**Causa:** el conector detecta el *hotplug* (pin HPD) y aparece `connected`, pero
+la **lectura del EDID falla** (`edid` = 0 bytes / `EDID block 0 is all zeroes`).
+El EDID viaja por los pines DDC/I²C, separados del HPD y de los datos de vídeo
+(TMDS). Sin EDID, el driver KMS cae a modos VESA genéricos (1024x768, 800x600…) y
+en un *replug* a menudo no fija ningún modo → "No Signal". Que funcione **una vez**
+por arranque en frío y nunca al reenchufar es la firma de un **cable/adaptador
+HDMI marginal o un conector flojo** (líneas DDC intermitentes; el vídeo y el HPD
+sí funcionan).
+
+**Importante (Pi 4/5 = KMS):** con el driver `vc4-kms-v3d`, los viejos trucos
+`hdmi_force_hotplug` y `config_hdmi_boost` de `config.txt` **no hacen nada**. El
+equivalente es forzar el modo por parámetro de kernel en `cmdline.txt`.
+
+**Solución:**
+1. Primero lo físico (causa raíz más común): **cambiar el cable HDMI** y, si hay
+   adaptador micro-HDMI→HDMI en el Pi 4, cambiarlo también; reasentar ambos
+   extremos. Usar el puerto **HDMI0** (el más cercano al USB-C = `HDMI-A-1`).
+2. Workaround robusto: **forzar un modo ignorando el EDID** en
+   `/boot/firmware/cmdline.txt` (una sola línea, sin saltos):
+
+   ```bash
+   sudo cp -n /boot/firmware/cmdline.txt /boot/firmware/cmdline.txt.bak
+   # Quita cualquier video= previo de HDMI-A-1 y fija 1024x768 (seguro en monitores viejos)
+   sudo sed -i -E 's/ ?video=HDMI-A-1:[^ ]*//g; s/$/ video=HDMI-A-1:1024x768@60D/' /boot/firmware/cmdline.txt
+   cat /boot/firmware/cmdline.txt          # verificar: UNA línea, termina en video=HDMI-A-1:1024x768@60D
+   sudo reboot
+   ```
+
+   El sufijo **`D`** = *force* (usa ese modo aunque no lea el EDID). Elegir la
+   resolución nativa del monitor si se conoce (17"/19" 5:4 → `1280x1024@60D`;
+   4:3 antiguo → `1024x768@60D`). Confirmado ✅: tras esto el *replug* recupera
+   imagen y `dmesg` ya no repite `EDID block 0 is all zeroes` en ese arranque.
+
+> Nota: para este proyecto el monitor no es imprescindible — el edge corre
+> *headless* por SSH (y con VNC si se quiere escritorio remoto).
+
 ## Gotchas de entorno (no del proyecto)
 
 - **Pi-hole** ocupaba el puerto 53; `pihole disable` NO libera el puerto (solo
